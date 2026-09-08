@@ -15,6 +15,14 @@ const DISTRIBUCION_POR_MODELO = {
   "Coihue": "3D-3B+ESC",
 };
 
+// Datos de contacto por vendedor — se usan para autocompletar teléfono y correo
+// al elegir el vendedor en el ingreso manual (los campos quedan editables igual).
+const VENDEDORES = {
+  "Alejandro Vásquez": { telefono: "+56 9 4223 4330", correo: "" },
+  "Flavio Simonetti": { telefono: "+56 9 4235 5665", correo: "" },
+  "Macarena Diaz": { telefono: "+56 9 4235 5665", correo: "" },
+};
+
 const state = { datos: null, casas: null };
 
 // ======================================================================
@@ -198,6 +206,26 @@ const btnAddCasa = document.getElementById("btn-add-casa");
 const btnGenerateManual = document.getElementById("btn-generate-manual");
 const errorBoxManual = document.getElementById("error-box-manual");
 
+// ---- selector de vendedor: autocompleta teléfono/correo (quedan editables) ----
+const vendedorSelect = document.getElementById("vendedor-select");
+const vendedorCustom = document.getElementById("vendedor-custom");
+const vendedorTelefono = document.getElementById("vendedor-telefono");
+const vendedorCorreo = document.getElementById("vendedor-correo");
+
+vendedorSelect.addEventListener("change", () => {
+  const esOtro = vendedorSelect.value === "__otro__";
+  vendedorCustom.hidden = !esOtro;
+  if (esOtro) {
+    vendedorCustom.focus();
+    return; // vendedor nuevo: teléfono/correo quedan como estén, para escribirlos a mano
+  }
+  const preset = VENDEDORES[vendedorSelect.value];
+  if (preset) {
+    vendedorTelefono.value = preset.telefono;
+    vendedorCorreo.value = preset.correo;
+  }
+});
+
 function addCasaCard() {
   const node = casaTemplate.content.cloneNode(true);
   const card = node.querySelector(".casa-card");
@@ -263,7 +291,13 @@ addCasaCard(); // arranca con una tarjeta lista para llenar
 
 function collectDatosFromForm() {
   const d = {};
-  document.querySelectorAll("#datos-form [data-field]").forEach(inp => { d[inp.dataset.field] = inp.value.trim(); });
+  document.querySelectorAll("#datos-form [data-field]").forEach(inp => {
+    let val = inp.value.trim();
+    if (inp.dataset.field === "Vendedor" && val === "__otro__") {
+      val = document.getElementById("vendedor-custom").value.trim();
+    }
+    d[inp.dataset.field] = val;
+  });
   return d;
 }
 
@@ -630,7 +664,10 @@ function drawFooter(doc, d, y) {
 
   const centerX = PAGE_W / 2;
   setF(doc, "WorkSansSB", 8.3, COLOR.verdePino);
-  doc.text(`${d["Vendedor"]} · ${d["Teléfono Vendedor"]} · neorigen.cl`, toPt(centerX), toPt(y), { baseline: "top", align: "center" });
+  const contactParts = [d["Vendedor"], d["Teléfono Vendedor"]];
+  if (d["Correo Vendedor"]) contactParts.push(d["Correo Vendedor"]);
+  contactParts.push("neorigen.cl");
+  doc.text(contactParts.filter(Boolean).join(" · "), toPt(centerX), toPt(y), { baseline: "top", align: "center" });
   y += 8.3 * 1.5;
 
   setF(doc, "WorkSans", 8.3, COLOR.footGray);

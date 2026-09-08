@@ -91,10 +91,20 @@
           <input type="text" data-field="Fecha" placeholder="dd-mm-aaaa">
         </label>
         <label>Vendedor
-          <input type="text" data-field="Vendedor" placeholder="Nombre del vendedor">
+          <select data-field="Vendedor" id="vendedor-select">
+            <option value="">Selecciona…</option>
+            <option>Alejandro Vásquez</option>
+            <option>Flavio Simonetti</option>
+            <option>Macarena Diaz</option>
+            <option value="__otro__">Otro (escribir)…</option>
+          </select>
+          <input type="text" id="vendedor-custom" class="modelo-custom" placeholder="Nombre del vendedor" hidden>
         </label>
         <label>Teléfono vendedor
-          <input type="text" data-field="Teléfono Vendedor" placeholder="+56 9 ...">
+          <input type="text" data-field="Teléfono Vendedor" id="vendedor-telefono" placeholder="+56 9 ...">
+        </label>
+        <label>Correo vendedor
+          <input type="email" data-field="Correo Vendedor" id="vendedor-correo" placeholder="nombre@neorigen.cl">
         </label>
         <label>Proyecto / ubicación
           <input type="text" data-field="Proyecto / Ubicación" placeholder="Ej: Pichilemu">
