@@ -461,9 +461,12 @@ function drawCasaBlock(doc, c, y, isFirst) {
   y += 17 * 1.25 + 10;
 
   // -- fila de chips (con salto de línea si no caben todos) --
+  // El chip de "Pisos" no lleva etiqueta: el valor ("1 piso", "2 pisos") ya se
+  // explica solo, y agregar la etiqueta "PISOS" al lado quedaba redundante
+  // ("1 piso PISOS").
   const chips = [
     [c.distribucion, "Distribución"],
-    [c.pisos, "Pisos"],
+    [c.pisos, ""],
     [fmt(c.m2u, 1), "M2 útil"],
     [fmt(c.m2t, 1), "M2 terraza"],
     [fmt(c.m2tot, 1), "M2 total"],
@@ -475,8 +478,8 @@ function drawCasaBlock(doc, c, y, isFirst) {
     doc.setFont("PlexMonoSB", "normal"); doc.setFontSize(toPt(12));
     const numW = textWidthPx(doc, num);
     doc.setFont("WorkSans", "normal"); doc.setFontSize(toPt(8.5));
-    const lblW = textWidthPx(doc, lblUpper);
-    const chipW = padX + numW + gapNumLbl + lblW + padX;
+    const lblW = lblUpper ? textWidthPx(doc, lblUpper) : 0;
+    const chipW = padX + numW + (lblUpper ? gapNumLbl + lblW : 0) + padX;
 
     if (cx + chipW > MARGIN_X + CONTENT_W && cx > MARGIN_X) {
       cx = MARGIN_X;
@@ -490,8 +493,10 @@ function drawCasaBlock(doc, c, y, isFirst) {
     const midY = rowY + chipH / 2;
     setF(doc, "PlexMonoSB", 12, COLOR.navy);
     doc.text(num, toPt(cx + padX), toPt(midY), { baseline: "middle" });
-    setF(doc, "WorkSans", 8.5, COLOR.verdePino);
-    doc.text(lblUpper, toPt(cx + padX + numW + gapNumLbl), toPt(midY), { baseline: "middle" });
+    if (lblUpper) {
+      setF(doc, "WorkSans", 8.5, COLOR.verdePino);
+      doc.text(lblUpper, toPt(cx + padX + numW + gapNumLbl), toPt(midY), { baseline: "middle" });
+    }
 
     cx += chipW + chipGap;
   });
@@ -798,9 +803,11 @@ async function generatePdf(mode) {
     // "Cotización" + filete) para mantener el orden y la armonía visual sin
     // importar en cuántas páginas termine cayendo el contenido.
     let isFirstContentPage = true;
+    let currentPageHasCasas = false; // ¿la página actual ya tiene alguna casa dibujada?
     function startContentPage() {
       if (!isFirstContentPage) doc.addPage(pageFormat, "p");
       isFirstContentPage = false;
+      currentPageHasCasas = false;
       return drawHeader(doc, d, MARGIN_TOP, logoImg);
     }
 
@@ -822,13 +829,24 @@ async function generatePdf(mode) {
       }
       y = drawCasaBlock(doc, c, y, firstCasaOnPage);
       firstCasaOnPage = false;
+      currentPageHasCasas = true;
     });
 
     // Condiciones + pie siempre quedan juntos (nunca separados entre sí).
     const condFooterH = measureBlockHeight((probe, startY) => {
       return drawFooter(probe, d, drawCondiciones(probe, d, startY));
     });
-    if (y + condFooterH > CONTENT_MAX_Y) y = startContentPage();
+    if (y + condFooterH > CONTENT_MAX_Y) {
+      y = startContentPage();
+    }
+    // Si condiciones + pie quedan solos en una página nueva (sin ninguna casa
+    // arriba, solo el encabezado), se alinean pegados al margen inferior —
+    // como un pie de página real — en vez de quedar arriba con un espacio en
+    // blanco enorme debajo. Cuando comparten página con alguna casa se dejan
+    // donde caigan naturalmente, justo después del último contenido.
+    if (!currentPageHasCasas) {
+      y = Math.max(y, CONTENT_MAX_Y - condFooterH);
+    }
     y = drawCondiciones(doc, d, y);
     y = drawFooter(doc, d, y);
 
