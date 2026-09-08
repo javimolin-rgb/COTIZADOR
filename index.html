@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cotizador Neorigen</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%23011E2F%22/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Work+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <img class="topbar__logo" src="assets/logo-neorigen.png" alt="Neorigen — Vive lo natural">
+  <div class="topbar__text">
+    <h1>Cotizador Neorigen</h1>
+    <p>Genera el PDF de una cotización subiendo una planilla o escribiendo los datos directamente.</p>
+  </div>
+</header>
+
+<main>
+
+  <div class="tabs" role="tablist">
+    <button class="tab active" data-tab="upload" role="tab" aria-selected="true">📄 Subir planilla (.xlsx)</button>
+    <button class="tab" data-tab="manual" role="tab" aria-selected="false">⌨️ Ingresar datos manualmente</button>
+  </div>
+
+  <!-- ======================= MODO 1: SUBIR EXCEL ======================= -->
+  <div id="tab-upload" class="tab-panel">
+
+    <section id="panel-upload" class="panel">
+      <div class="panel__head">
+        <span class="step-badge">1</span>
+        <h2>Sube la planilla</h2>
+      </div>
+
+      <div id="dropzone" class="dropzone" tabindex="0">
+        <input type="file" id="file-input" accept=".xlsx,.xls" hidden>
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+          <path d="M12 3v12m0-12 4.5 4.5M12 3 7.5 7.5"/>
+          <path d="M4 16.5V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2.5"/>
+        </svg>
+        <p><strong>Arrastra el archivo .xlsx aquí</strong> o haz clic para elegirlo</p>
+        <p class="dropzone__hint">Debe tener las hojas <code>Datos</code> y <code>Casas</code> — usa la planilla de ejemplo si no la tienes.</p>
+      </div>
+
+      <div class="upload-foot">
+        <a id="download-template" href="plantilla-cotizacion.xlsx" download>⬇ Descargar planilla de ejemplo (.xlsx)</a>
+        <span id="file-name" class="file-name"></span>
+      </div>
+
+      <div id="error-box-upload" class="error-box" hidden></div>
+    </section>
+
+    <section id="panel-preview" class="panel" hidden>
+      <div class="panel__head">
+        <span class="step-badge">2</span>
+        <h2>Revisa los datos</h2>
+      </div>
+
+      <div class="preview-datos" id="preview-datos"></div>
+
+      <div class="table-wrap">
+        <table id="preview-table">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <button id="btn-generate-upload" class="btn-primary">Generar PDF</button>
+      <p class="generating-msg" data-for="upload" hidden>Generando PDF…</p>
+    </section>
+
+  </div>
+
+  <!-- ======================= MODO 2: INGRESO MANUAL ======================= -->
+  <div id="tab-manual" class="tab-panel" hidden>
+
+    <section class="panel">
+      <div class="panel__head">
+        <span class="step-badge">1</span>
+        <h2>Datos generales</h2>
+      </div>
+      <div class="form-grid" id="datos-form">
+        <label>Cliente
+          <input type="text" data-field="Cliente" placeholder="Nombre del cliente">
+        </label>
+        <label>Fecha
+          <input type="text" data-field="Fecha" placeholder="dd-mm-aaaa">
+        </label>
+        <label>Vendedor
+          <input type="text" data-field="Vendedor" placeholder="Nombre del vendedor">
+        </label>
+        <label>Teléfono vendedor
+          <input type="text" data-field="Teléfono Vendedor" placeholder="+56 9 ...">
+        </label>
+        <label>Proyecto / ubicación
+          <input type="text" data-field="Proyecto / Ubicación" placeholder="Ej: Pichilemu">
+        </label>
+        <label>Vigencia (días)
+          <input type="number" data-field="Vigencia (días)" placeholder="30" value="30">
+        </label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head">
+        <span class="step-badge">2</span>
+        <h2>Casas cotizadas</h2>
+      </div>
+      <div id="casas-container"></div>
+      <button id="btn-add-casa" class="btn-secondary">+ Agregar otra casa</button>
+    </section>
+
+    <div id="error-box-manual" class="error-box" hidden></div>
+    <button id="btn-generate-manual" class="btn-primary">Generar PDF</button>
+    <p class="generating-msg" data-for="manual" hidden>Generando PDF…</p>
+
+  </div>
+
+</main>
+
+<footer class="page-footer">
+  <p>Herramienta interna Neorigen · no requiere conexión a servidor, todo se procesa en tu navegador.</p>
+</footer>
+
+<!-- plantilla de una tarjeta "casa" para el modo manual -->
+<template id="casa-card-template">
+  <div class="casa-card">
+    <button type="button" class="casa-remove" title="Eliminar esta casa">✕</button>
+    <div class="form-grid">
+      <label>Modelo
+        <select data-field="Modelo" class="modelo-select">
+          <option value="">Selecciona…</option>
+          <option>Lingue</option>
+          <option>Huingán</option>
+          <option>Maitén</option>
+          <option>Peumo</option>
+          <option>Roble</option>
+          <option>Coihue</option>
+          <option value="__otro__">Otro (escribir)…</option>
+        </select>
+        <input type="text" class="modelo-custom" placeholder="Nombre del modelo" hidden>
+      </label>
+      <label>Distribución
+        <input type="text" data-field="Distribución" placeholder="Ej: 2D-2B">
+      </label>
+      <label>Pisos
+        <input type="text" list="pisos-list" data-field="Pisos" placeholder="Ej: 1 piso">
+      </label>
+      <label>M2 útil
+        <input type="number" step="0.1" class="calc-input" data-field="M2 Útil" placeholder="0">
+      </label>
+      <label>M2 terraza
+        <input type="number" step="0.1" class="calc-input" data-field="M2 Terraza" placeholder="0">
+      </label>
+      <label>M2 totales
+        <input type="number" step="0.1" class="calc-input" data-field="M2 Totales" placeholder="(auto)">
+      </label>
+      <label>Valor UF/m2 útil
+        <input type="number" step="0.01" class="calc-input" data-field="Valor UF m2 Útil" placeholder="0">
+      </label>
+      <label>Valor UF/m2 terraza
+        <input type="number" step="0.01" class="calc-input" data-field="Valor UF m2 Terraza" placeholder="0">
+      </label>
+      <label class="readonly-field">Total UF útil
+        <input type="text" data-computed="Total UF Útil" readonly placeholder="(auto)">
+      </label>
+      <label class="readonly-field">Total UF terraza
+        <input type="text" data-computed="Total UF Terraza" readonly placeholder="(auto)">
+      </label>
+      <label class="readonly-field">Valor UF neto + IVA
+        <input type="text" data-computed="Valor UF Neto + IVA" readonly placeholder="(auto)">
+      </label>
+      <label class="readonly-field">Valor prom UF/m2
+        <input type="text" data-computed="Valor Prom UF/m2" readonly placeholder="(auto)">
+      </label>
+    </div>
+    <label class="notas-label">Notas (opcional)
+      <textarea data-field="Notas" rows="2" placeholder="Ej: Doble altura, materiales nobles…"></textarea>
+    </label>
+  </div>
+</template>
+
+<datalist id="pisos-list">
+  <option value="1 piso">
+  <option value="2 pisos">
+  <option value="1 piso + entretecho">
+</datalist>
+
+<!-- contenedor oculto donde se arman las páginas para exportar a PDF -->
+<div id="pdf-stage" aria-hidden="true"></div>
+
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="vendor/html2canvas.min.js"></script>
+<script src="vendor/jspdf.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
