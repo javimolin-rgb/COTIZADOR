@@ -328,11 +328,13 @@ btnGenerateManual.addEventListener("click", () => {
 const PT_PER_PX = 0.75; // 96dpi (css px, igual que el resto del diseño) -> 72dpi (pt, unidad nativa del PDF)
 function toPt(px) { return px * PT_PER_PX; }
 
-const PAGE_W = 794;      // A4 @ 96dpi de ancho
+const PAGE_W = 816;      // tamaño carta (Letter, 8.5in) @ 96dpi de ancho
+const PAGE_H = 1056;     // tamaño carta (Letter, 11in) @ 96dpi de alto — TODAS las páginas del PDF miden esto
 const MARGIN_X = 48;
 const MARGIN_TOP = 40;
 const MARGIN_BOTTOM = 28;
 const CONTENT_W = PAGE_W - MARGIN_X * 2;
+const CONTENT_MAX_Y = PAGE_H - MARGIN_BOTTOM; // límite inferior útil de cada página
 
 const COLOR = {
   navy: [1, 30, 47],
@@ -435,7 +437,14 @@ function drawMetaGrid(doc, d, y) {
   return ruleY + 20;
 }
 
+// Alto que suma el separador punteado entre casas (ver drawCasaBlock) — se usa
+// para calcular si una casa cabe en el espacio que queda de la página actual.
+const DIVIDER_H = 36;
+
 // ---- una "casa" cotizada: título + chips + tabla de precios + total + notas ----
+// `isFirst` = es la primera casa dibujada en la página ACTUAL (no necesariamente
+// la primera casa de toda la cotización) — así nunca queda un separador punteado
+// huérfano justo debajo del encabezado de una página nueva.
 function drawCasaBlock(doc, c, y, isFirst) {
   if (!isFirst) {
     y += 18;
@@ -676,14 +685,9 @@ function invertLogoToWhite(img) {
 }
 
 function drawTurnkeyPage(doc, logoWhite) {
-  // El fondo navy debe cubrir el alto REAL de la página. jsPDF ya "hornea" la
-  // posición de cada trazo usando el alto de página vigente en el momento de
-  // dibujar, así que esta página se dibuja dos veces (ver buildPageHeight):
-  // una vez para medir el contenido y otra, ya con el alto final fijado de
-  // antemano en el documento, para dibujarla de verdad — por eso acá se lee
-  // el alto ACTUAL de la página en vez de usar un valor provisional que
-  // habría que recortar después (recortar después solo mueve el recuadro
-  // visible y termina cortando el contenido de ARRIBA, no el espacio vacío).
+  // El fondo navy cubre la página carta completa (se lee el alto vigente del
+  // documento en vez de usar PAGE_H "a mano" para no depender de que nadie
+  // desalinee esto si en algún momento cambia cómo se arma la página).
   doc.setFillColor(...COLOR.navy);
   doc.rect(0, 0, toPt(PAGE_W), doc.internal.pageSize.getHeight(), "F");
 
@@ -756,31 +760,20 @@ function drawTurnkeyPage(doc, logoWhite) {
   return y;
 }
 
-// Dibuja `drawFn` en un documento de prueba (descartable) con una página bien
-// alta, y devuelve el alto final que debería tener la página real para que el
-// contenido calce exacto y no sobre espacio en blanco. Es necesario medir ANTES
-// de crear/dibujar el documento real: jsPDF calcula la posición de cada trazo
-// usando el alto de página vigente en ese instante, así que el alto final debe
-// quedar fijado desde el principio (recortar la página después de dibujar no
-// reubica lo ya dibujado — solo recorta el visor y termina cortando el
-// contenido de arriba en vez del espacio vacío de abajo).
-function buildPageHeight(drawFn) {
+// Todas las páginas miden lo mismo (tamaño carta fijo), así que ya no hace
+// falta "medir la página completa" como antes — pero para decidir si una
+// casa cabe en el espacio que queda de la página actual sí hay que saber su
+// alto ANTES de dibujarla de verdad. jsPDF fija la posición de cada trazo
+// usando el alto de página vigente en el momento de dibujar (no se puede
+// "recortar" después sin cortar contenido por error), así que se mide
+// dibujando `drawFn` una vez de más, en un documento de prueba descartable
+// con una página bien alta, y se descarta ese documento.
+function measureBlockHeight(drawFn) {
   const { jsPDF } = window.jspdf;
-  // Alto de sobra para medir: siempre más alto que ancho, así jamás dispara
-  // el auto-swap de orientación de jsPDF (ver orientFor más abajo).
-  const probe = new jsPDF({ unit: "pt", format: [toPt(PAGE_W), toPt(6000)], orientation: "p" });
+  const probe = new jsPDF({ unit: "pt", format: [toPt(PAGE_W), toPt(4000)], orientation: "p" });
   registerFonts(probe);
-  const contentBottomY = drawFn(probe);
-  return contentBottomY + MARGIN_BOTTOM;
+  return drawFn(probe, MARGIN_TOP) - MARGIN_TOP;
 }
-
-// jsPDF, si no se le indica explícitamente la orientación, asume "portrait" y
-// INTERCAMBIA ancho/alto en cualquier formato personalizado ([w,h]) que reciba
-// más ancho que alto — tanto en `new jsPDF({format:[w,h]})` como en
-// `doc.addPage([w,h])`. Nuestra página "Proyectos llave en mano" puede terminar
-// siendo más ancha que alta si el contenido es corto, así que hay que pasar
-// SIEMPRE la orientación real para evitar ese intercambio silencioso.
-function orientFor(widthPt, heightPt) { return heightPt >= widthPt ? "p" : "l"; }
 
 async function generatePdf(mode) {
   const btn = mode === "upload" ? btnGenerateUpload : btnGenerateManual;
@@ -797,36 +790,51 @@ async function generatePdf(mode) {
     const logoImg = await loadImage("assets/logo-neorigen.png");
     const logoWhite = invertLogoToWhite(logoImg);
 
-    // La página 1 (la cotización en sí) es siempre 1 sola página: el ancho
-    // queda fijo (A4) y el alto se ajusta según el contenido real dibujado
-    // (encabezado + una casa por bloque + condiciones + pie), sin importar
-    // cuántas casas se hayan cotizado. La página 2 ("Proyectos llave en
-    // mano") siempre se agrega y su contenido es fijo.
-    const drawPage1 = docRef => {
-      let y = MARGIN_TOP;
-      y = drawHeader(docRef, d, y, logoImg);
-      y = drawMetaGrid(docRef, d, y);
-      casas.forEach((c, i) => { y = drawCasaBlock(docRef, c, y, i === 0); });
-      y = drawCondiciones(docRef, d, y);
-      y = drawFooter(docRef, d, y);
-      return y;
-    };
-    const drawPage2 = docRef => drawTurnkeyPage(docRef, logoWhite);
-
-    // Se mide el alto real de cada página ANTES de crear el documento final
-    // (ver buildPageHeight): jsPDF fija la posición de cada trazo con el alto
-    // de página vigente en el momento de dibujar, así que no se puede "recortar"
-    // la página después sin cortar el contenido de arriba por error.
-    const page1H = buildPageHeight(drawPage1);
-    const page2H = buildPageHeight(drawPage2);
-
-    const w = toPt(PAGE_W);
-    const doc = new jsPDF({ unit: "pt", format: [w, toPt(page1H)], orientation: orientFor(w, toPt(page1H)) });
+    const pageFormat = [toPt(PAGE_W), toPt(PAGE_H)];
+    const doc = new jsPDF({ unit: "pt", format: pageFormat, orientation: "p" });
     registerFonts(doc);
-    drawPage1(doc);
 
-    doc.addPage([w, toPt(page2H)], orientFor(w, toPt(page2H)));
-    drawPage2(doc);
+    // Todas las páginas de la cotización repiten el mismo encabezado (logo +
+    // "Cotización" + filete) para mantener el orden y la armonía visual sin
+    // importar en cuántas páginas termine cayendo el contenido.
+    let isFirstContentPage = true;
+    function startContentPage() {
+      if (!isFirstContentPage) doc.addPage(pageFormat, "p");
+      isFirstContentPage = false;
+      return drawHeader(doc, d, MARGIN_TOP, logoImg);
+    }
+
+    let y = startContentPage();
+    y = drawMetaGrid(doc, d, y);
+
+    // Cada casa se mide antes de dibujarla: si no entera en lo que queda de
+    // la página actual, se pasa una página nueva completa (nunca se corte
+    // un bloque de casa a la mitad) — así, con más de 1-2 casas cotizadas,
+    // la cotización simplemente continúa en la(s) página(s) que hagan falta,
+    // manteniendo siempre el mismo orden y el mismo lenguaje visual.
+    let firstCasaOnPage = true;
+    casas.forEach(c => {
+      const coreH = measureBlockHeight((probe, startY) => drawCasaBlock(probe, c, startY, true));
+      const blockH = coreH + (firstCasaOnPage ? 0 : DIVIDER_H);
+      if (y + blockH > CONTENT_MAX_Y) {
+        y = startContentPage();
+        firstCasaOnPage = true;
+      }
+      y = drawCasaBlock(doc, c, y, firstCasaOnPage);
+      firstCasaOnPage = false;
+    });
+
+    // Condiciones + pie siempre quedan juntos (nunca separados entre sí).
+    const condFooterH = measureBlockHeight((probe, startY) => {
+      return drawFooter(probe, d, drawCondiciones(probe, d, startY));
+    });
+    if (y + condFooterH > CONTENT_MAX_Y) y = startContentPage();
+    y = drawCondiciones(doc, d, y);
+    y = drawFooter(doc, d, y);
+
+    // Página fija, siempre agregada al final: "Proyectos llave en mano".
+    doc.addPage(pageFormat, "p");
+    drawTurnkeyPage(doc, logoWhite);
 
     const cliente = (d["Cliente"] || "cliente").toString().trim().replace(/[^\w\-]+/g, "_");
     const fecha = (d["Fecha"] || "").toString().trim().replace(/[^\w\-]+/g, "_");
