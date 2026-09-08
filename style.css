@@ -217,6 +217,7 @@ main{
   color:#fff;
 }
 .tab-panel{display:flex;flex-direction:column;gap:24px;}
+.tab-panel[hidden]{display:none;}
 
 /* ---------- manual form ---------- */
 .form-grid{
@@ -310,140 +311,121 @@ main{
 }
 
 .pdf-page{
-  width:794px;   /* A4 @ 96dpi */
-  height:1123px;
+  width:794px;   /* A4 @ 96dpi de ancho — el alto se ajusta solo al contenido, siempre 1 página */
   background:#fff;
   font-family:var(--font-body);
   color:var(--ink);
   position:relative;
-  overflow:hidden;
+  padding:40px 48px 28px;
 }
 
-/* --- cover page --- */
-.pdf-cover{
-  background:var(--navy);
-  color:#fff;
+/* --- encabezado --- */
+.pdf-header{
   display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  text-align:center;
-  gap:28px;
-  padding:60px;
-}
-.pdf-cover img{width:260px;filter:brightness(0) invert(1);}
-.pdf-cover .kicker{
-  font-family:var(--font-mono);
-  letter-spacing:.12em;
-  text-transform:uppercase;
-  font-size:13px;
-  opacity:.7;
-}
-.pdf-cover h1{
-  font-family:var(--font-display);
-  font-weight:600;
-  font-size:44px;
-  margin:0;
-}
-.pdf-cover .cover-meta{
-  margin-top:20px;
-  display:flex;
-  gap:46px;
-}
-.pdf-cover .cover-meta div{text-align:left;}
-.pdf-cover .cover-meta span.k{
-  display:block;
-  font-family:var(--font-mono);
-  font-size:11px;
-  letter-spacing:.08em;
-  text-transform:uppercase;
-  opacity:.6;
-  margin-bottom:4px;
-}
-.pdf-cover .cover-meta span.v{font-size:17px;font-weight:600;}
-
-/* --- casa (spec) page --- */
-.pdf-head{
-  background:var(--navy);
-  color:#fff;
-  padding:30px 44px;
-  display:flex;
-  align-items:center;
+  align-items:flex-start;
   justify-content:space-between;
+  gap:20px;
+  padding-bottom:16px;
+  border-bottom:2px solid var(--navy);
+  margin-bottom:18px;
 }
-.pdf-head .eyebrow{
+.pdf-header img{height:42px;width:auto;}
+.pdf-header .title-block{text-align:right;}
+.pdf-header .kicker{
   font-family:var(--font-mono);
-  font-size:11px;
   letter-spacing:.1em;
   text-transform:uppercase;
-  opacity:.65;
-  margin:0 0 6px;
+  font-size:10px;
+  color:var(--madera);
+  margin:0 0 2px;
 }
-.pdf-head h2{
+.pdf-header h1{
   font-family:var(--font-display);
   font-weight:600;
-  font-size:30px;
+  font-size:26px;
+  color:var(--navy);
   margin:0;
 }
-.pdf-head img{height:30px;filter:brightness(0) invert(1);}
-
-.pdf-body{padding:36px 44px 0;}
-
-.stat-row{
-  display:grid;
-  grid-template-columns:repeat(5,1fr);
-  gap:10px;
-  margin-bottom:30px;
-}
-.stat-box{
-  border:1.5px solid var(--navy);
-  border-radius:8px;
-  padding:14px 8px;
-  text-align:center;
-}
-.stat-box .num{
-  font-family:var(--font-mono);
-  font-weight:600;
-  font-size:20px;
-  color:var(--navy);
-  display:block;
-}
-.stat-box .lbl{
-  font-size:10px;
-  letter-spacing:.03em;
-  text-transform:uppercase;
+.pdf-header .eyebrow{
+  font-size:11px;
   color:var(--verde-pino);
-  display:block;
-  margin-top:3px;
+  margin:4px 0 0;
 }
+
+/* --- datos generales --- */
+.meta-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:12px 20px;
+  margin-bottom:20px;
+  padding-bottom:18px;
+  border-bottom:1px solid var(--border);
+}
+.meta-grid div{display:flex;flex-direction:column;gap:2px;}
+.meta-grid span.k{
+  font-family:var(--font-mono);
+  font-size:9px;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+  color:var(--madera);
+}
+.meta-grid span.v{font-size:12.5px;font-weight:600;}
+
+/* --- bloque por casa --- */
+.casa-block{margin-bottom:18px;}
+.casa-block + .casa-block{padding-top:18px;border-top:1px dashed var(--border);}
+.casa-block h2{
+  font-family:var(--font-display);
+  font-weight:600;
+  font-size:17px;
+  color:var(--navy);
+  margin:0 0 10px;
+}
+
+.chip-row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-bottom:14px;
+}
+.chip{
+  border:1.3px solid var(--navy);
+  border-radius:6px;
+  padding:5px 10px;
+  display:flex;
+  gap:6px;
+  align-items:baseline;
+}
+.chip .num{font-family:var(--font-mono);font-weight:600;font-size:12px;color:var(--navy);}
+.chip .lbl{font-size:8.5px;text-transform:uppercase;letter-spacing:.02em;color:var(--verde-pino);}
 
 .section-title{
   font-family:var(--font-mono);
-  font-size:11px;
+  font-size:10.5px;
   letter-spacing:.1em;
   text-transform:uppercase;
   color:var(--madera);
   border-bottom:1px solid var(--border);
-  padding-bottom:8px;
-  margin:0 0 14px;
+  padding-bottom:6px;
+  margin:0 0 10px;
 }
 
 .price-table{
   width:100%;
   border-collapse:collapse;
-  margin-bottom:26px;
-  font-size:13px;
+  margin-bottom:14px;
+  font-size:11.5px;
 }
 .price-table th,.price-table td{
   border:1px solid var(--border);
-  padding:9px 12px;
+  padding:6px 10px;
   text-align:left;
 }
 .price-table thead th{
   background:var(--niebla);
   font-family:var(--font-mono);
-  font-size:10px;
-  letter-spacing:.04em;
+  font-size:9px;
+  letter-spacing:.03em;
   text-transform:uppercase;
   color:var(--verde-pino);
 }
@@ -452,66 +434,48 @@ main{
 .total-box{
   background:var(--navy);
   color:#fff;
-  border-radius:10px;
-  padding:20px 26px;
+  border-radius:8px;
+  padding:12px 20px;
   display:flex;
   align-items:center;
   justify-content:space-between;
-  margin-bottom:26px;
+  margin-bottom:12px;
 }
 .total-box .k{
   font-family:var(--font-mono);
-  font-size:11px;
-  letter-spacing:.08em;
+  font-size:9.5px;
+  letter-spacing:.06em;
   text-transform:uppercase;
   opacity:.7;
 }
 .total-box .v{
   font-family:var(--font-display);
   font-weight:600;
-  font-size:32px;
+  font-size:23px;
 }
-.total-box .sub{font-family:var(--font-mono);font-size:11px;opacity:.7;margin-top:4px;}
+.total-box .sub{font-family:var(--font-mono);font-size:10px;opacity:.7;margin-top:3px;}
 
 .notes-block{
   background:var(--niebla);
   border-left:3px solid var(--madera);
   border-radius:0 6px 6px 0;
-  padding:14px 18px;
-  font-size:12.5px;
+  padding:10px 14px;
+  font-size:11px;
   color:#374544;
-  margin-bottom:20px;
 }
+
+/* --- condiciones --- */
+.cond-section{margin-top:4px;}
+.cond-list{margin:0;padding-left:15px;columns:2;column-gap:24px;}
+.cond-list li{font-size:9.8px;margin-bottom:6px;break-inside:avoid;}
 
 .pdf-foot{
-  position:absolute;
-  bottom:0; left:0; right:0;
-  padding:16px 44px;
+  margin-top:18px;
+  padding-top:12px;
   border-top:1px solid var(--border);
-  font-size:9.5px;
+  font-size:8.3px;
+  line-height:1.5;
   color:#8b9795;
-  display:flex;
-  justify-content:space-between;
+  text-align:center;
 }
-
-/* --- condiciones page --- */
-.cond-list{margin:0 0 26px; padding-left:18px;}
-.cond-list li{margin-bottom:8px;font-size:13px;}
-.signature-box{
-  border:1px solid var(--border);
-  border-radius:10px;
-  padding:20px 24px;
-  display:flex;
-  justify-content:space-between;
-  gap:20px;
-}
-.signature-box .k{
-  font-family:var(--font-mono);
-  font-size:10px;
-  letter-spacing:.06em;
-  text-transform:uppercase;
-  color:var(--verde-pino);
-  display:block;
-  margin-bottom:4px;
-}
-.signature-box .v{font-weight:600;font-size:14px;}
+.pdf-foot strong{color:var(--verde-pino);font-weight:600;}

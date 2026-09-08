@@ -210,11 +210,12 @@ function addCasaCard() {
   recalcCard(card);
 }
 
-// los <input type="number"> del formulario manual siempre entregan el punto como
-// separador decimal (nunca como separador de miles) — a diferencia de toNumber(),
-// que asume el formato chileno usado al leer texto de una planilla Excel.
+// Los campos de m2/valores del formulario manual son <input type="text"> (para poder
+// aceptar tanto coma como punto decimal, como se escribe normalmente en Chile).
+// Acepta "73,8" o "73.8" por igual.
 function plainNumber(v) {
-  const n = parseFloat(v);
+  if (v === null || v === undefined) return 0;
+  const n = parseFloat(String(v).trim().replace(",", "."));
   return isNaN(n) ? 0 : n;
 }
 
@@ -255,7 +256,7 @@ function collectCasasFromForm() {
     const row = {};
     card.querySelectorAll("[data-field]").forEach(inp => {
       if (inp.classList.contains("modelo-custom")) return;
-      let val = inp.type === "number" ? (inp.value === "" ? "" : plainNumber(inp.value)) : inp.value.trim();
+      let val = inp.classList.contains("calc-input") ? (inp.value === "" ? "" : plainNumber(inp.value)) : inp.value.trim();
       if (inp.dataset.field === "Modelo" && val === "__otro__") {
         val = card.querySelector(".modelo-custom").value.trim();
       }
@@ -309,90 +310,70 @@ function el(html) {
   return div.firstChild;
 }
 
-function buildPageElements() {
-  const d = state.datos;
-  const pages = [buildCoverPage(d)];
-  state.casas.forEach(c => pages.push(buildCasaPage(d, c)));
-  pages.push(buildCondicionesPage(d));
-  return pages;
+function buildCasaBlock(c) {
+  return `
+    <div class="casa-block">
+      <h2>Casa ${c.modelo}</h2>
+      <div class="chip-row">
+        <div class="chip"><span class="num">${c.distribucion}</span><span class="lbl">Distribución</span></div>
+        <div class="chip"><span class="num">${c.pisos}</span><span class="lbl">Pisos</span></div>
+        <div class="chip"><span class="num">${fmt(c.m2u, 1)}</span><span class="lbl">M2 útil</span></div>
+        <div class="chip"><span class="num">${fmt(c.m2t, 1)}</span><span class="lbl">M2 terraza</span></div>
+        <div class="chip"><span class="num">${fmt(c.m2tot, 1)}</span><span class="lbl">M2 total</span></div>
+      </div>
+
+      <table class="price-table">
+        <thead><tr>
+          <th>Concepto</th><th class="num">Valor UF/m2</th><th class="num">Superficie m2</th><th class="num">Total UF</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>M2 útil</td><td class="num">${fmt(c.vu, 2)}</td><td class="num">${fmt(c.m2u, 1)}</td><td class="num">${fmt(c.totalUtil)}</td></tr>
+          <tr><td>M2 terraza</td><td class="num">${fmt(c.vt, 2)}</td><td class="num">${fmt(c.m2t, 1)}</td><td class="num">${fmt(c.totalTerraza)}</td></tr>
+        </tbody>
+      </table>
+
+      <div class="total-box">
+        <div>
+          <span class="k">Valor UF neto + IVA</span>
+          <div class="v">UF ${fmt(c.totalNeto)}</div>
+        </div>
+        <div style="text-align:right">
+          <span class="k">Valor promedio</span>
+          <div class="sub">UF ${fmt(c.promM2, 2)} / m2</div>
+        </div>
+      </div>
+
+      ${c.notas ? `<div class="notes-block">${c.notas}</div>` : ""}
+    </div>
+  `;
 }
 
-function buildCoverPage(d) {
+function buildSinglePage(d, casas) {
+  const casasHtml = casas.map(buildCasaBlock).join("");
+
   return el(`
-    <div class="pdf-page pdf-cover">
-      <img src="assets/logo-neorigen.png" alt="Neorigen">
-      <div>
-        <p class="kicker">Vive lo natural</p>
-        <h1>Cotización</h1>
+    <div class="pdf-page">
+      <div class="pdf-header">
+        <img src="assets/logo-neorigen.png" alt="Neorigen">
+        <div class="title-block">
+          <p class="kicker">Vive lo natural</p>
+          <h1>Cotización</h1>
+          <p class="eyebrow">${d["Proyecto / Ubicación"]}</p>
+        </div>
       </div>
-      <div class="cover-meta">
+
+      <div class="meta-grid">
         <div><span class="k">Cliente</span><span class="v">${d["Cliente"]}</span></div>
         <div><span class="k">Fecha</span><span class="v">${d["Fecha"]}</span></div>
-        <div><span class="k">Proyecto</span><span class="v">${d["Proyecto / Ubicación"]}</span></div>
+        <div><span class="k">Vigencia</span><span class="v">${d["Vigencia (días)"]} días</span></div>
+        <div><span class="k">Proyecto / Ubicación</span><span class="v">${d["Proyecto / Ubicación"]}</span></div>
+        <div><span class="k">Vendedor</span><span class="v">${d["Vendedor"]}</span></div>
+        <div><span class="k">Teléfono vendedor</span><span class="v">${d["Teléfono Vendedor"]}</span></div>
       </div>
-    </div>
-  `);
-}
 
-function buildCasaPage(d, c) {
-  return el(`
-    <div class="pdf-page">
-      <div class="pdf-head">
-        <div>
-          <p class="eyebrow">${d["Proyecto / Ubicación"]}</p>
-          <h2>Casa ${c.modelo}</h2>
-        </div>
-        <img src="assets/logo-neorigen.png" alt="Neorigen">
-      </div>
-      <div class="pdf-body">
-        <div class="stat-row">
-          <div class="stat-box"><span class="num">${c.distribucion}</span><span class="lbl">Distribución</span></div>
-          <div class="stat-box"><span class="num">${c.pisos}</span><span class="lbl">Pisos</span></div>
-          <div class="stat-box"><span class="num">${fmt(c.m2u, 1)}</span><span class="lbl">M2 Útiles</span></div>
-          <div class="stat-box"><span class="num">${fmt(c.m2t, 1)}</span><span class="lbl">M2 Terraza</span></div>
-          <div class="stat-box"><span class="num">${fmt(c.m2tot, 1)}</span><span class="lbl">M2 Totales</span></div>
-        </div>
+      ${casasHtml}
 
-        <p class="section-title">Cotización</p>
-        <table class="price-table">
-          <thead><tr>
-            <th>Concepto</th><th class="num">Valor UF/m2</th><th class="num">Superficie m2</th><th class="num">Total UF</th>
-          </tr></thead>
-          <tbody>
-            <tr><td>M2 útil</td><td class="num">${fmt(c.vu, 2)}</td><td class="num">${fmt(c.m2u, 1)}</td><td class="num">${fmt(c.totalUtil)}</td></tr>
-            <tr><td>M2 terraza</td><td class="num">${fmt(c.vt, 2)}</td><td class="num">${fmt(c.m2t, 1)}</td><td class="num">${fmt(c.totalTerraza)}</td></tr>
-          </tbody>
-        </table>
-
-        <div class="total-box">
-          <div>
-            <span class="k">Valor UF neto + IVA</span>
-            <div class="v">UF ${fmt(c.totalNeto)}</div>
-          </div>
-          <div style="text-align:right">
-            <span class="k">Valor promedio</span>
-            <div class="sub">UF ${fmt(c.promM2, 2)} / m2</div>
-          </div>
-        </div>
-
-        ${c.notas ? `<div class="notes-block">${c.notas}</div>` : ""}
-      </div>
-      <div class="pdf-foot">
-        <span>${d["Vendedor"]} · ${d["Teléfono Vendedor"]} · neorigen.cl</span>
-        <span>Cotización sujeta a estudio de factibilidad del terreno y especificaciones técnicas a definir.</span>
-      </div>
-    </div>
-  `);
-}
-
-function buildCondicionesPage(d) {
-  return el(`
-    <div class="pdf-page">
-      <div class="pdf-head">
-        <div><p class="eyebrow">${d["Proyecto / Ubicación"]}</p><h2>Condiciones</h2></div>
-        <img src="assets/logo-neorigen.png" alt="Neorigen">
-      </div>
-      <div class="pdf-body">
+      <div class="cond-section">
         <p class="section-title">Condiciones generales</p>
         <ul class="cond-list">
           <li>Contrato a precio cerrado.</li>
@@ -401,17 +382,10 @@ function buildCondicionesPage(d) {
           <li>El proyecto puede ajustarse a tus requerimientos personales o del terreno.</li>
           <li>Esta cotización tiene una vigencia de ${d["Vigencia (días)"]} días desde la fecha de emisión.</li>
         </ul>
-
-        <p class="section-title">Contacto</p>
-        <div class="signature-box">
-          <div><span class="k">Vendedor</span><span class="v">${d["Vendedor"]}</span></div>
-          <div><span class="k">Teléfono</span><span class="v">${d["Teléfono Vendedor"]}</span></div>
-          <div><span class="k">Web</span><span class="v">neorigen.cl</span></div>
-        </div>
       </div>
+
       <div class="pdf-foot">
-        <span>Neorigen · Vive lo natural</span>
-        <span>Las imágenes, caracterizaciones y textos son referenciales y no constituyen necesariamente una representación exacta de la realidad.</span>
+        <strong>${d["Vendedor"]} · ${d["Teléfono Vendedor"]} · neorigen.cl</strong> — Cotización sujeta a estudio de factibilidad del terreno y especificaciones técnicas a definir. Las imágenes, caracterizaciones y textos son referenciales.
       </div>
     </div>
   `);
@@ -425,19 +399,23 @@ async function generatePdf(mode) {
   await new Promise(r => setTimeout(r, 30));
 
   try {
-    const pages = buildPageElements();
+    const d = state.datos;
+    const page = buildSinglePage(d, state.casas);
     pdfStage.innerHTML = "";
-    pages.forEach(p => pdfStage.appendChild(p));
+    pdfStage.appendChild(page);
+
+    const canvas = await html2canvas(page, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+    const img = canvas.toDataURL("image/jpeg", 0.95);
+
+    // El PDF es siempre 1 sola página: el ancho queda fijo (A4) y el alto se
+    // calcula según el contenido real capturado, sin importar cuántas casas
+    // se hayan cotizado.
+    const pageWidthPx = 794;
+    const pageHeightPx = Math.round(canvas.height / (canvas.width / pageWidthPx));
 
     const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ unit: "px", format: [794, 1123], hotfixes: ["px_scaling"] });
-
-    for (let i = 0; i < pages.length; i++) {
-      const canvas = await html2canvas(pages[i], { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-      const img = canvas.toDataURL("image/jpeg", 0.95);
-      if (i > 0) pdf.addPage([794, 1123]);
-      pdf.addImage(img, "JPEG", 0, 0, 794, 1123);
-    }
+    const pdf = new jsPDF({ unit: "px", format: [pageWidthPx, pageHeightPx], hotfixes: ["px_scaling"] });
+    pdf.addImage(img, "JPEG", 0, 0, pageWidthPx, pageHeightPx);
 
     const cliente = (state.datos["Cliente"] || "cliente").toString().trim().replace(/[^\w\-]+/g, "_");
     const fecha = (state.datos["Fecha"] || "").toString().trim().replace(/[^\w\-]+/g, "_");

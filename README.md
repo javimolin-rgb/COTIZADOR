@@ -9,15 +9,16 @@ arma y descarga ahí mismo — no hay servidor, no hay que instalar nada, funcio
 ## Qué incluye
 
 - **Modo 1 — Subir planilla:** sube un `.xlsx` con dos hojas (`Datos` y `Casas`) y genera el PDF.
-  Incluye una planilla de ejemplo descargable con datos reales (Casa Huingán / Casa Coihue) para
-  copiar el formato.
+  Incluye una planilla **en blanco** descargable, lista para rellenar y subir directamente (con
+  menú desplegable de modelos y una hoja de instrucciones).
 - **Modo 2 — Ingreso manual:** un formulario con menú desplegable para elegir el modelo (Lingue,
   Huingán, Maitén, Peumo, Roble, Coihue, u "Otro" para escribir uno nuevo), que permite agregar
   varias casas a la misma cotización. Los totales en UF se calculan solos a medida que escribes
-  los m2 y el valor UF/m2 (y los puedes dejar así o sobreescribirlos).
-- El PDF generado tiene: portada con el cliente y el proyecto, una página por cada casa cotizada
-  (ficha con m2, distribución, tabla de precios y total destacado) y una página de condiciones +
-  contacto del vendedor.
+  los m2 y el valor UF/m2 (y los puedes dejar así o sobreescribirlos). Los campos de m2 y valores
+  aceptan tanto coma como punto decimal (73,8 o 73.8), como se escribe normalmente en Chile.
+- El PDF generado es siempre **de 1 sola página**, sin importar cuántas casas se coticen: encabezado
+  con el cliente y el proyecto, un bloque compacto por cada casa (m2, distribución, tabla de precios
+  y total destacado) y, al final, las condiciones generales + contacto del vendedor.
 
 ## Cómo publicarlo en GitHub Pages
 
@@ -48,19 +49,24 @@ style.css                 estilos (tokens de marca: navy, verde pino, madera, ni
 app.js                    toda la lógica: parseo de Excel, formulario manual, armado del PDF
 vendor/                   3 librerías de terceros (SheetJS, jsPDF, html2canvas) — no depende de ningún CDN
 assets/logo-neorigen.png  logo real de Neorigen (extraído de la firma de correo de Flavio)
-plantilla-cotizacion.xlsx planilla de ejemplo descargable desde la propia página
+plantilla-cotizacion.xlsx planilla EN BLANCO descargable desde la propia página, lista para rellenar
 ```
 
 ## Notas técnicas / a tener en cuenta
 
-- El PDF se arma "fotografiando" cada página con html2canvas y pegando esa imagen en el PDF — por
+- El PDF se arma "fotografiando" la página con html2canvas y pegando esa imagen en el PDF — por
   eso queda idéntico al diseño en pantalla, pero el texto del PDF **no es seleccionable/copiable**
   (es una imagen). Si más adelante quieren un PDF con texto real seleccionable, se puede rehacer
   con otra librería, pero es bastante más trabajo de maquetación.
+- El PDF siempre tiene 1 sola página: el ancho es fijo (tamaño carta/A4) y el alto se ajusta solo
+  al contenido real (cuántas casas se cotizaron), por lo que con muchas casas el bloque de cada una
+  queda más compacto para que todo siga entrando en la misma página.
 - Las tipografías (Fraunces, Work Sans, IBM Plex Mono) se cargan desde Google Fonts, así que la
   página necesita conexión a internet para verse con la tipografía correcta (si no hay internet,
   cae a una tipografía de reemplazo del sistema, pero el resto del diseño no se rompe).
 - La hoja `Datos` es una sola fila (los datos generales de la cotización); la hoja `Casas` puede
-  tener tantas filas como casas se estén cotizando — cada una se convierte en una página del PDF.
+  tener tantas filas como casas se estén cotizando — cada una se convierte en un bloque del PDF.
 - Si dejas vacías las columnas de totales en la planilla o en el formulario, se calculan solas
   (m2 × valor UF/m2). Si las completas a mano, se respeta lo que hayas escrito.
+- Los campos numéricos del formulario manual (m2, valores UF/m2) aceptan coma o punto como
+  separador decimal.

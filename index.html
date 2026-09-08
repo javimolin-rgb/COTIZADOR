@@ -43,11 +43,11 @@
           <path d="M4 16.5V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2.5"/>
         </svg>
         <p><strong>Arrastra el archivo .xlsx aquí</strong> o haz clic para elegirlo</p>
-        <p class="dropzone__hint">Debe tener las hojas <code>Datos</code> y <code>Casas</code> — usa la planilla de ejemplo si no la tienes.</p>
+        <p class="dropzone__hint">Debe tener las hojas <code>Datos</code> y <code>Casas</code> — descarga la planilla en blanco más abajo, rellénala y súbela aquí.</p>
       </div>
 
       <div class="upload-foot">
-        <a id="download-template" href="plantilla-cotizacion.xlsx" download>⬇ Descargar planilla de ejemplo (.xlsx)</a>
+        <a id="download-template" href="plantilla-cotizacion.xlsx" download>⬇ Descargar planilla en blanco (.xlsx)</a>
         <span id="file-name" class="file-name"></span>
       </div>
 
@@ -151,19 +151,19 @@
         <input type="text" list="pisos-list" data-field="Pisos" placeholder="Ej: 1 piso">
       </label>
       <label>M2 útil
-        <input type="number" step="0.1" class="calc-input" data-field="M2 Útil" placeholder="0">
+        <input type="text" inputmode="decimal" class="calc-input" data-field="M2 Útil" placeholder="Ej: 73,8">
       </label>
       <label>M2 terraza
-        <input type="number" step="0.1" class="calc-input" data-field="M2 Terraza" placeholder="0">
+        <input type="text" inputmode="decimal" class="calc-input" data-field="M2 Terraza" placeholder="Ej: 37,8">
       </label>
       <label>M2 totales
-        <input type="number" step="0.1" class="calc-input" data-field="M2 Totales" placeholder="(auto)">
+        <input type="text" inputmode="decimal" class="calc-input" data-field="M2 Totales" placeholder="(auto)">
       </label>
       <label>Valor UF/m2 útil
-        <input type="number" step="0.01" class="calc-input" data-field="Valor UF m2 Útil" placeholder="0">
+        <input type="text" inputmode="decimal" class="calc-input" data-field="Valor UF m2 Útil" placeholder="Ej: 36,5">
       </label>
       <label>Valor UF/m2 terraza
-        <input type="number" step="0.01" class="calc-input" data-field="Valor UF m2 Terraza" placeholder="0">
+        <input type="text" inputmode="decimal" class="calc-input" data-field="Valor UF m2 Terraza" placeholder="Ej: 6">
       </label>
       <label class="readonly-field">Total UF útil
         <input type="text" data-computed="Total UF Útil" readonly placeholder="(auto)">
