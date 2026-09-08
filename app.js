@@ -317,95 +317,470 @@ btnGenerateManual.addEventListener("click", () => {
 
 // ======================================================================
 // Generación del PDF (compartida por ambos modos)
+//
+// El PDF se dibuja directamente con los comandos de texto/gráficos de jsPDF
+// (no se "fotografía" la pantalla) — así el texto queda real y seleccionable/
+// copiable, y las tildes y la ñ se ven perfectas gracias a las fuentes de
+// marca (Fraunces/Work Sans/IBM Plex Mono) embebidas en vendor/fonts.js, sin
+// depender de internet para verse bien.
 // ======================================================================
 
-const pdfStage = document.getElementById("pdf-stage");
+const PT_PER_PX = 0.75; // 96dpi (css px, igual que el resto del diseño) -> 72dpi (pt, unidad nativa del PDF)
+function toPt(px) { return px * PT_PER_PX; }
 
-function el(html) {
-  const div = document.createElement("div");
-  div.innerHTML = html.trim();
-  return div.firstChild;
+const PAGE_W = 794;      // A4 @ 96dpi de ancho
+const MARGIN_X = 48;
+const MARGIN_TOP = 40;
+const MARGIN_BOTTOM = 28;
+const CONTENT_W = PAGE_W - MARGIN_X * 2;
+
+const COLOR = {
+  navy: [1, 30, 47],
+  verdePino: [60, 74, 62],
+  madera: [169, 118, 74],
+  niebla: [241, 244, 243],
+  ink: [26, 31, 34],
+  border: [223, 227, 226],
+  notesText: [55, 69, 68],
+  footGray: [139, 151, 149],
+  white: [255, 255, 255],
+  whiteMuted: [178, 194, 203],
+};
+
+const FONT_MAP = [
+  ["Fraunces-SemiBold", "Fraunces-SemiBold.ttf", "FrauncesSB"],
+  ["WorkSans-Regular", "WorkSans-Regular.ttf", "WorkSans"],
+  ["WorkSans-SemiBold", "WorkSans-SemiBold.ttf", "WorkSansSB"],
+  ["IBMPlexMono-Regular", "IBMPlexMono-Regular.ttf", "PlexMono"],
+  ["IBMPlexMono-SemiBold", "IBMPlexMono-SemiBold.ttf", "PlexMonoSB"],
+];
+
+function registerFonts(doc) {
+  const bundle = window.NEORIGEN_FONTS || {};
+  FONT_MAP.forEach(([key, filename, family]) => {
+    if (!bundle[key]) return;
+    doc.addFileToVFS(filename, bundle[key]);
+    doc.addFont(filename, family, "normal");
+  });
 }
 
-function buildCasaBlock(c) {
-  return `
-    <div class="casa-block">
-      <h2>Casa ${c.modelo}</h2>
-      <div class="chip-row">
-        <div class="chip"><span class="num">${c.distribucion}</span><span class="lbl">Distribución</span></div>
-        <div class="chip"><span class="num">${c.pisos}</span><span class="lbl">Pisos</span></div>
-        <div class="chip"><span class="num">${fmt(c.m2u, 1)}</span><span class="lbl">M2 útil</span></div>
-        <div class="chip"><span class="num">${fmt(c.m2t, 1)}</span><span class="lbl">M2 terraza</span></div>
-        <div class="chip"><span class="num">${fmt(c.m2tot, 1)}</span><span class="lbl">M2 total</span></div>
-      </div>
-
-      <table class="price-table">
-        <thead><tr>
-          <th>Concepto</th><th class="num">Valor UF/m2</th><th class="num">Superficie m2</th><th class="num">Total UF</th>
-        </tr></thead>
-        <tbody>
-          <tr><td>M2 útil</td><td class="num">${fmt(c.vu, 2)}</td><td class="num">${fmt(c.m2u, 1)}</td><td class="num">${fmt(c.totalUtil)}</td></tr>
-          <tr><td>M2 terraza</td><td class="num">${fmt(c.vt, 2)}</td><td class="num">${fmt(c.m2t, 1)}</td><td class="num">${fmt(c.totalTerraza)}</td></tr>
-        </tbody>
-      </table>
-
-      <div class="total-box">
-        <div>
-          <span class="k">Valor UF neto + IVA</span>
-          <div class="v">UF ${fmt(c.totalNeto)}</div>
-        </div>
-        <div style="text-align:right">
-          <span class="k">Valor promedio</span>
-          <div class="sub">UF ${fmt(c.promM2, 2)} / m2</div>
-        </div>
-      </div>
-
-      ${c.notas ? `<div class="notes-block">${c.notas}</div>` : ""}
-    </div>
-  `;
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
 }
 
-function buildSinglePage(d, casas) {
-  const casasHtml = casas.map(buildCasaBlock).join("");
-
-  return el(`
-    <div class="pdf-page">
-      <div class="pdf-header">
-        <img src="assets/logo-neorigen.png" alt="Neorigen">
-        <div class="title-block">
-          <p class="kicker">Vive lo natural</p>
-          <h1>Cotización</h1>
-        </div>
-      </div>
-
-      <div class="meta-grid">
-        <div><span class="k">Cliente</span><span class="v">${d["Cliente"]}</span></div>
-        <div><span class="k">Fecha</span><span class="v">${d["Fecha"]}</span></div>
-        <div><span class="k">Vigencia</span><span class="v">${d["Vigencia (días)"]} días</span></div>
-        <div><span class="k">Proyecto / Ubicación</span><span class="v">${d["Proyecto / Ubicación"]}</span></div>
-        <div><span class="k">Vendedor</span><span class="v">${d["Vendedor"]}</span></div>
-        <div><span class="k">Teléfono vendedor</span><span class="v">${d["Teléfono Vendedor"]}</span></div>
-      </div>
-
-      ${casasHtml}
-
-      <div class="cond-section">
-        <p class="section-title">Condiciones generales</p>
-        <ul class="cond-list">
-          <li>Contrato a precio cerrado.</li>
-          <li>Forma de pago: cuotas contra estado de avance.</li>
-          <li>Proyectos diseñados para ocuparse inmediatamente, con todo el equipamiento esencial, salvo cama, refrigerador, lavadora y otros electrodomésticos personales.</li>
-          <li>El proyecto puede ajustarse a tus requerimientos personales o del terreno.</li>
-          <li>Esta cotización tiene una vigencia de ${d["Vigencia (días)"]} días desde la fecha de emisión.</li>
-        </ul>
-      </div>
-
-      <div class="pdf-foot">
-        <strong>${d["Vendedor"]} · ${d["Teléfono Vendedor"]} · neorigen.cl</strong> — Cotización sujeta a estudio de factibilidad del terreno y especificaciones técnicas a definir. Las imágenes, caracterizaciones y textos son referenciales.
-      </div>
-    </div>
-  `);
+function setF(doc, family, sizePx, colorRgb) {
+  doc.setFont(family, "normal");
+  doc.setFontSize(toPt(sizePx));
+  if (colorRgb) doc.setTextColor(colorRgb[0], colorRgb[1], colorRgb[2]);
 }
+
+function textWidthPx(doc, str) {
+  return doc.getTextWidth(str) / PT_PER_PX;
+}
+
+// ---- encabezado: logo + "Cotización" ----
+function drawHeader(doc, d, y, logoImg) {
+  const logoH = 72;
+  const logoW = logoH * (logoImg.naturalWidth / logoImg.naturalHeight);
+  doc.addImage(logoImg, "PNG", toPt(MARGIN_X), toPt(y), toPt(logoW), toPt(logoH), undefined, "MEDIUM");
+
+  const rightX = PAGE_W - MARGIN_X;
+  setF(doc, "PlexMono", 10, COLOR.madera);
+  doc.text("VIVE LO NATURAL", toPt(rightX), toPt(y), { baseline: "top", align: "right" });
+  setF(doc, "FrauncesSB", 26, COLOR.navy);
+  doc.text("Cotización", toPt(rightX), toPt(y + 15), { baseline: "top", align: "right" });
+
+  const headerBottom = y + logoH;
+  const ruleY = headerBottom + 16;
+  doc.setDrawColor(...COLOR.navy);
+  doc.setLineWidth(toPt(2));
+  doc.line(toPt(MARGIN_X), toPt(ruleY), toPt(rightX), toPt(ruleY));
+  return ruleY + 18;
+}
+
+// ---- datos generales: grilla de 3 columnas x 2 filas ----
+function drawMetaGrid(doc, d, y) {
+  const fields = [
+    ["Cliente", d["Cliente"]],
+    ["Fecha", d["Fecha"]],
+    ["Vigencia", `${d["Vigencia (días)"]} días`],
+    ["Proyecto / Ubicación", d["Proyecto / Ubicación"]],
+    ["Vendedor", d["Vendedor"]],
+    ["Teléfono vendedor", d["Teléfono Vendedor"]],
+  ];
+  const colGap = 20, rowGap = 12;
+  const colW = (CONTENT_W - colGap * 2) / 3;
+  const rowH = 28;
+
+  fields.forEach(([label, value], i) => {
+    const col = i % 3, row = Math.floor(i / 3);
+    const x = MARGIN_X + col * (colW + colGap);
+    const cellY = y + row * (rowH + rowGap);
+    setF(doc, "PlexMono", 9, COLOR.madera);
+    doc.text(label.toUpperCase(), toPt(x), toPt(cellY), { baseline: "top" });
+    setF(doc, "WorkSansSB", 12.5, COLOR.ink);
+    doc.text(String(value), toPt(x), toPt(cellY + 13), { baseline: "top" });
+  });
+
+  const contentBottom = y + rowH * 2 + rowGap;
+  const ruleY = contentBottom + 18;
+  doc.setDrawColor(...COLOR.border);
+  doc.setLineWidth(toPt(1));
+  doc.line(toPt(MARGIN_X), toPt(ruleY), toPt(PAGE_W - MARGIN_X), toPt(ruleY));
+  return ruleY + 20;
+}
+
+// ---- una "casa" cotizada: título + chips + tabla de precios + total + notas ----
+function drawCasaBlock(doc, c, y, isFirst) {
+  if (!isFirst) {
+    y += 18;
+    doc.setDrawColor(...COLOR.border);
+    doc.setLineWidth(toPt(1));
+    doc.setLineDashPattern([toPt(3), toPt(2)], 0);
+    doc.line(toPt(MARGIN_X), toPt(y), toPt(PAGE_W - MARGIN_X), toPt(y));
+    doc.setLineDashPattern([], 0);
+    y += 18;
+  }
+
+  setF(doc, "FrauncesSB", 17, COLOR.navy);
+  doc.text(`Casa ${c.modelo}`, toPt(MARGIN_X), toPt(y), { baseline: "top" });
+  y += 17 * 1.25 + 10;
+
+  // -- fila de chips (con salto de línea si no caben todos) --
+  const chips = [
+    [c.distribucion, "Distribución"],
+    [c.pisos, "Pisos"],
+    [fmt(c.m2u, 1), "M2 útil"],
+    [fmt(c.m2t, 1), "M2 terraza"],
+    [fmt(c.m2tot, 1), "M2 total"],
+  ];
+  const chipH = 24, padX = 10, gapNumLbl = 6, chipGap = 8;
+  let cx = MARGIN_X, rowY = y;
+  chips.forEach(([num, lbl]) => {
+    const lblUpper = lbl.toUpperCase();
+    doc.setFont("PlexMonoSB", "normal"); doc.setFontSize(toPt(12));
+    const numW = textWidthPx(doc, num);
+    doc.setFont("WorkSans", "normal"); doc.setFontSize(toPt(8.5));
+    const lblW = textWidthPx(doc, lblUpper);
+    const chipW = padX + numW + gapNumLbl + lblW + padX;
+
+    if (cx + chipW > MARGIN_X + CONTENT_W && cx > MARGIN_X) {
+      cx = MARGIN_X;
+      rowY += chipH + chipGap;
+    }
+
+    doc.setDrawColor(...COLOR.navy);
+    doc.setLineWidth(toPt(1.3));
+    doc.roundedRect(toPt(cx), toPt(rowY), toPt(chipW), toPt(chipH), toPt(4), toPt(4), "S");
+
+    const midY = rowY + chipH / 2;
+    setF(doc, "PlexMonoSB", 12, COLOR.navy);
+    doc.text(num, toPt(cx + padX), toPt(midY), { baseline: "middle" });
+    setF(doc, "WorkSans", 8.5, COLOR.verdePino);
+    doc.text(lblUpper, toPt(cx + padX + numW + gapNumLbl), toPt(midY), { baseline: "middle" });
+
+    cx += chipW + chipGap;
+  });
+  y = rowY + chipH + 14;
+
+  // -- tabla de precios --
+  const colW = [240, Math.round((CONTENT_W - 240) / 3), Math.round((CONTENT_W - 240) / 3), 0];
+  colW[3] = CONTENT_W - colW[0] - colW[1] - colW[2];
+  const headerH = 23, rowH2 = 26;
+  const rows = [
+    ["M2 útil", fmt(c.vu, 2), fmt(c.m2u, 1), fmt(c.totalUtil)],
+    ["M2 terraza", fmt(c.vt, 2), fmt(c.m2t, 1), fmt(c.totalTerraza)],
+  ];
+  const headerLabels = ["Concepto", "Valor UF/m2", "Superficie m2", "Total UF"];
+
+  let tx = MARGIN_X;
+  doc.setFillColor(...COLOR.niebla);
+  doc.rect(toPt(MARGIN_X), toPt(y), toPt(CONTENT_W), toPt(headerH), "F");
+  doc.setDrawColor(...COLOR.border);
+  doc.setLineWidth(toPt(1));
+  headerLabels.forEach((label, i) => {
+    doc.rect(toPt(tx), toPt(y), toPt(colW[i]), toPt(headerH), "S");
+    setF(doc, "PlexMono", 9, COLOR.verdePino);
+    const align = i === 0 ? "left" : "right";
+    const lx = i === 0 ? tx + 10 : tx + colW[i] - 10;
+    doc.text(label.toUpperCase(), toPt(lx), toPt(y + headerH / 2), { baseline: "middle", align });
+    tx += colW[i];
+  });
+
+  let ry = y + headerH;
+  rows.forEach(row => {
+    tx = MARGIN_X;
+    row.forEach((cell, i) => {
+      doc.setDrawColor(...COLOR.border);
+      doc.setLineWidth(toPt(1));
+      doc.rect(toPt(tx), toPt(ry), toPt(colW[i]), toPt(rowH2), "S");
+      setF(doc, i === 0 ? "WorkSans" : "PlexMono", 11.5, COLOR.ink);
+      const align = i === 0 ? "left" : "right";
+      const lx = i === 0 ? tx + 10 : tx + colW[i] - 10;
+      doc.text(String(cell), toPt(lx), toPt(ry + rowH2 / 2), { baseline: "middle", align });
+      tx += colW[i];
+    });
+    ry += rowH2;
+  });
+  y = ry + 12;
+
+  // -- total destacado --
+  const boxH = 48, padXBox = 20;
+  doc.setFillColor(...COLOR.navy);
+  doc.roundedRect(toPt(MARGIN_X), toPt(y), toPt(CONTENT_W), toPt(boxH), toPt(6), toPt(6), "F");
+  setF(doc, "PlexMono", 9.5, COLOR.whiteMuted);
+  doc.text("VALOR UF NETO + IVA", toPt(MARGIN_X + padXBox), toPt(y + 15), { baseline: "middle" });
+  setF(doc, "FrauncesSB", 23, COLOR.white);
+  doc.text(`UF ${fmt(c.totalNeto)}`, toPt(MARGIN_X + padXBox), toPt(y + 33), { baseline: "middle" });
+  const rightEdge = MARGIN_X + CONTENT_W - padXBox;
+  setF(doc, "PlexMono", 9.5, COLOR.whiteMuted);
+  doc.text("VALOR PROMEDIO", toPt(rightEdge), toPt(y + 17), { baseline: "middle", align: "right" });
+  setF(doc, "PlexMono", 10, COLOR.whiteMuted);
+  doc.text(`UF ${fmt(c.promM2, 2)} / m2`, toPt(rightEdge), toPt(y + 32), { baseline: "middle", align: "right" });
+  y += boxH + 12;
+
+  // -- notas (opcional) --
+  if (c.notas) {
+    setF(doc, "WorkSans", 11);
+    const notesW = CONTENT_W - 14 * 2;
+    const lines = doc.splitTextToSize(c.notas, toPt(notesW));
+    const lineH = 11 * 1.4;
+    const notesBoxH = 10 * 2 + lines.length * lineH;
+    doc.setFillColor(...COLOR.niebla);
+    doc.rect(toPt(MARGIN_X), toPt(y), toPt(CONTENT_W), toPt(notesBoxH), "F");
+    doc.setFillColor(...COLOR.madera);
+    doc.rect(toPt(MARGIN_X), toPt(y), toPt(3), toPt(notesBoxH), "F");
+    doc.setTextColor(...COLOR.notesText);
+    lines.forEach((line, i) => {
+      doc.text(line, toPt(MARGIN_X + 14), toPt(y + 10 + i * lineH), { baseline: "top" });
+    });
+    y += notesBoxH;
+  }
+
+  return y;
+}
+
+// ---- condiciones generales (lista en 2 columnas) ----
+function drawCondiciones(doc, d, y) {
+  setF(doc, "PlexMono", 10.5, COLOR.madera);
+  doc.text("CONDICIONES GENERALES", toPt(MARGIN_X), toPt(y), { baseline: "top" });
+  const ruleY = y + 10.5 * 1.2 + 6;
+  doc.setDrawColor(...COLOR.border);
+  doc.setLineWidth(toPt(1));
+  doc.line(toPt(MARGIN_X), toPt(ruleY), toPt(PAGE_W - MARGIN_X), toPt(ruleY));
+  y = ruleY + 10;
+
+  const items = [
+    "Contrato a precio cerrado.",
+    "Forma de pago: cuotas contra estado de avance.",
+    "Proyectos diseñados para ocuparse inmediatamente, con todo el equipamiento esencial, salvo cama, refrigerador, lavadora y otros electrodomésticos personales.",
+    "El proyecto puede ajustarse a tus requerimientos personales o del terreno.",
+    `Esta cotización tiene una vigencia de ${d["Vigencia (días)"]} días desde la fecha de emisión.`,
+  ];
+  const colGap = 24;
+  const colW = (CONTENT_W - colGap) / 2;
+  const col1Count = Math.ceil(items.length / 2);
+  const columns = [items.slice(0, col1Count), items.slice(col1Count)];
+
+  setF(doc, "WorkSans", 9.8, COLOR.ink);
+  const bulletLineH = 9.8 * 1.35;
+
+  const bottoms = columns.map((list, colIdx) => {
+    const x = MARGIN_X + colIdx * (colW + colGap);
+    let cy = y;
+    list.forEach(item => {
+      const lines = doc.splitTextToSize("•  " + item, toPt(colW));
+      lines.forEach(line => {
+        doc.text(line, toPt(x), toPt(cy), { baseline: "top" });
+        cy += bulletLineH;
+      });
+      cy += 6;
+    });
+    return cy;
+  });
+  return Math.max(...bottoms);
+}
+
+// ---- pie de página ----
+function drawFooter(doc, d, y) {
+  y += 4;
+  doc.setDrawColor(...COLOR.border);
+  doc.setLineWidth(toPt(1));
+  doc.line(toPt(MARGIN_X), toPt(y), toPt(PAGE_W - MARGIN_X), toPt(y));
+  y += 12;
+
+  const centerX = PAGE_W / 2;
+  setF(doc, "WorkSansSB", 8.3, COLOR.verdePino);
+  doc.text(`${d["Vendedor"]} · ${d["Teléfono Vendedor"]} · neorigen.cl`, toPt(centerX), toPt(y), { baseline: "top", align: "center" });
+  y += 8.3 * 1.5;
+
+  setF(doc, "WorkSans", 8.3, COLOR.footGray);
+  const disclaimer = "Cotización sujeta a estudio de factibilidad del terreno y especificaciones técnicas a definir. Las imágenes, caracterizaciones y textos son referenciales.";
+  const lines = doc.splitTextToSize(disclaimer, toPt(CONTENT_W));
+  const lineH = 8.3 * 1.5;
+  lines.forEach((line, i) => {
+    doc.text(line, toPt(centerX), toPt(y + i * lineH), { baseline: "top", align: "center" });
+  });
+  return y + lines.length * lineH;
+}
+
+// ======================================================================
+// Página 2: "Proyectos llave en mano" — página fija (no depende de los
+// datos de la cotización) que siempre se agrega al final, en Azul Origen
+// con texto blanco, con todo lo que incluye cada proyecto Neorigen.
+// ======================================================================
+
+const TURNKEY_ITEMS = [
+  "Asesoría y acompañamiento en todo el proceso",
+  "Estructura completamente aislada (muros, techos y pisos)",
+  "Construcción sobre pilotes (eficiencia térmica y energética)",
+  "Mayor eficiencia con fachada ventilada (circulación de aire entre muros exteriores)",
+  "Muebles de cocina y closet en cada dormitorio (diseño flexible)",
+  "Artefactos de cocina (horno, encimera, extractor, cuba)",
+  "Cuarzo para cubiertas de cocina",
+  "Baños completamente equipados con shower, WC, vanitorio y kit de accesorios",
+  "Ventanas termopanel con perfil PVC (color a elección)",
+  "Piso y revestimiento de muro en madera (calidez y confort)",
+  "Muros pintados albayalde y piso vitrificado",
+  "Grifería y quincallería completa",
+  "Puertas de 2 mts de altura en toda la casa",
+  "Red eléctrica, sanitaria y de gas",
+  "Amplias terrazas aptas para zonas extremas",
+  "Estufa a combustión lenta incluida (Amesti o Bosca)",
+  "Diseños de planimetría flexibles y personalizados",
+  "Tramitación de permisos y recepción municipal",
+  "Fosa séptica, drenes y acometidas a servicios básicos",
+];
+
+// Invierte a blanco el logo (que viene en trazo navy sobre fondo transparente)
+// para poder usarlo sobre el fondo Azul Origen de esta página — igual que el
+// filter:brightness(0) invert(1) que ya se usa en el encabezado de la app.
+function invertLogoToWhite(img) {
+  const canvas = document.createElement("canvas");
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0);
+  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const px = imgData.data;
+  for (let i = 0; i < px.length; i += 4) {
+    px[i] = 255; px[i + 1] = 255; px[i + 2] = 255; // deja el alfa (px[i+3]) intacto
+  }
+  ctx.putImageData(imgData, 0, 0);
+  return canvas;
+}
+
+function drawTurnkeyPage(doc, logoWhite) {
+  // El fondo navy debe cubrir el alto REAL de la página. jsPDF ya "hornea" la
+  // posición de cada trazo usando el alto de página vigente en el momento de
+  // dibujar, así que esta página se dibuja dos veces (ver buildPageHeight):
+  // una vez para medir el contenido y otra, ya con el alto final fijado de
+  // antemano en el documento, para dibujarla de verdad — por eso acá se lee
+  // el alto ACTUAL de la página en vez de usar un valor provisional que
+  // habría que recortar después (recortar después solo mueve el recuadro
+  // visible y termina cortando el contenido de ARRIBA, no el espacio vacío).
+  doc.setFillColor(...COLOR.navy);
+  doc.rect(0, 0, toPt(PAGE_W), doc.internal.pageSize.getHeight(), "F");
+
+  const rightX = PAGE_W - MARGIN_X;
+  const centerX = PAGE_W / 2;
+  let y = MARGIN_TOP;
+
+  // -- encabezado (mismo tratamiento que la página 1, en blanco sobre navy) --
+  const logoH = 48;
+  const logoW = logoH * (logoWhite.width / logoWhite.height);
+  doc.addImage(logoWhite, "PNG", toPt(MARGIN_X), toPt(y), toPt(logoW), toPt(logoH), undefined, "MEDIUM");
+  setF(doc, "PlexMono", 10, COLOR.whiteMuted);
+  doc.text("VIVE LO NATURAL", toPt(rightX), toPt(y), { baseline: "top", align: "right" });
+  setF(doc, "FrauncesSB", 22, COLOR.white);
+  doc.text("Llave en mano", toPt(rightX), toPt(y + 15), { baseline: "top", align: "right" });
+
+  const ruleY = y + logoH + 16;
+  doc.setDrawColor(...COLOR.whiteMuted);
+  doc.setLineWidth(toPt(1));
+  doc.line(toPt(MARGIN_X), toPt(ruleY), toPt(rightX), toPt(ruleY));
+  y = ruleY + 34;
+
+  // -- título central --
+  setF(doc, "PlexMono", 10, COLOR.madera);
+  doc.text("INCLUIDO EN TODOS NUESTROS PROYECTOS", toPt(centerX), toPt(y), { baseline: "top", align: "center" });
+  y += 10 * 1.3 + 8;
+  setF(doc, "FrauncesSB", 27, COLOR.white);
+  doc.text("Proyectos llave en mano", toPt(centerX), toPt(y), { baseline: "top", align: "center" });
+  y += 27 * 1.25 + 28;
+
+  // -- lista en 2 columnas --
+  const colGap = 32;
+  const colW = (CONTENT_W - colGap) / 2;
+  const col1Count = Math.ceil(TURNKEY_ITEMS.length / 2);
+  const columns = [TURNKEY_ITEMS.slice(0, col1Count), TURNKEY_ITEMS.slice(col1Count)];
+
+  setF(doc, "WorkSans", 11.5, COLOR.white);
+  const lineH = 11.5 * 1.55;
+  const listTop = y;
+  const bottoms = columns.map((list, colIdx) => {
+    const x = MARGIN_X + colIdx * (colW + colGap);
+    let cy = listTop;
+    list.forEach(item => {
+      const lines = doc.splitTextToSize(item, toPt(colW - 16));
+      lines.forEach((line, i) => {
+        setF(doc, "WorkSans", 11.5, COLOR.white);
+        doc.text((i === 0 ? "•  " : "    ") + line, toPt(x), toPt(cy), { baseline: "top" });
+        cy += lineH;
+      });
+      cy += 7;
+    });
+    return cy;
+  });
+  y = Math.max(...bottoms) + 30;
+
+  // -- cierre --
+  doc.setDrawColor(...COLOR.whiteMuted);
+  doc.setLineWidth(toPt(1));
+  doc.line(toPt(MARGIN_X), toPt(y), toPt(rightX), toPt(y));
+  y += 30;
+  setF(doc, "FrauncesSB", 19, COLOR.white);
+  doc.text("Conversemos para diseñar juntos tu casa", toPt(centerX), toPt(y), { baseline: "top", align: "center" });
+  y += 19 * 1.3 + 40;
+
+  // -- pie --
+  setF(doc, "PlexMono", 9, COLOR.whiteMuted);
+  doc.text("NEORIGEN · VIVE LO NATURAL · NEORIGEN.CL", toPt(centerX), toPt(y), { baseline: "top", align: "center" });
+  y += 9 * 1.4;
+
+  return y;
+}
+
+// Dibuja `drawFn` en un documento de prueba (descartable) con una página bien
+// alta, y devuelve el alto final que debería tener la página real para que el
+// contenido calce exacto y no sobre espacio en blanco. Es necesario medir ANTES
+// de crear/dibujar el documento real: jsPDF calcula la posición de cada trazo
+// usando el alto de página vigente en ese instante, así que el alto final debe
+// quedar fijado desde el principio (recortar la página después de dibujar no
+// reubica lo ya dibujado — solo recorta el visor y termina cortando el
+// contenido de arriba en vez del espacio vacío de abajo).
+function buildPageHeight(drawFn) {
+  const { jsPDF } = window.jspdf;
+  // Alto de sobra para medir: siempre más alto que ancho, así jamás dispara
+  // el auto-swap de orientación de jsPDF (ver orientFor más abajo).
+  const probe = new jsPDF({ unit: "pt", format: [toPt(PAGE_W), toPt(6000)], orientation: "p" });
+  registerFonts(probe);
+  const contentBottomY = drawFn(probe);
+  return contentBottomY + MARGIN_BOTTOM;
+}
+
+// jsPDF, si no se le indica explícitamente la orientación, asume "portrait" y
+// INTERCAMBIA ancho/alto en cualquier formato personalizado ([w,h]) que reciba
+// más ancho que alto — tanto en `new jsPDF({format:[w,h]})` como en
+// `doc.addPage([w,h])`. Nuestra página "Proyectos llave en mano" puede terminar
+// siendo más ancha que alta si el contenido es corto, así que hay que pasar
+// SIEMPRE la orientación real para evitar ese intercambio silencioso.
+function orientFor(widthPt, heightPt) { return heightPt >= widthPt ? "p" : "l"; }
 
 async function generatePdf(mode) {
   const btn = mode === "upload" ? btnGenerateUpload : btnGenerateManual;
@@ -416,32 +791,51 @@ async function generatePdf(mode) {
 
   try {
     const d = state.datos;
-    const page = buildSinglePage(d, state.casas);
-    pdfStage.innerHTML = "";
-    pdfStage.appendChild(page);
-
-    const canvas = await html2canvas(page, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-    const img = canvas.toDataURL("image/jpeg", 0.95);
-
-    // El PDF es siempre 1 sola página: el ancho queda fijo (A4) y el alto se
-    // calcula según el contenido real capturado, sin importar cuántas casas
-    // se hayan cotizado.
-    const pageWidthPx = 794;
-    const pageHeightPx = Math.round(canvas.height / (canvas.width / pageWidthPx));
+    const casas = state.casas;
 
     const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ unit: "px", format: [pageWidthPx, pageHeightPx], hotfixes: ["px_scaling"] });
-    pdf.addImage(img, "JPEG", 0, 0, pageWidthPx, pageHeightPx);
+    const logoImg = await loadImage("assets/logo-neorigen.png");
+    const logoWhite = invertLogoToWhite(logoImg);
 
-    const cliente = (state.datos["Cliente"] || "cliente").toString().trim().replace(/[^\w\-]+/g, "_");
-    const fecha = (state.datos["Fecha"] || "").toString().trim().replace(/[^\w\-]+/g, "_");
-    pdf.save(`Cotizacion_Neorigen_${cliente}_${fecha}.pdf`);
+    // La página 1 (la cotización en sí) es siempre 1 sola página: el ancho
+    // queda fijo (A4) y el alto se ajusta según el contenido real dibujado
+    // (encabezado + una casa por bloque + condiciones + pie), sin importar
+    // cuántas casas se hayan cotizado. La página 2 ("Proyectos llave en
+    // mano") siempre se agrega y su contenido es fijo.
+    const drawPage1 = docRef => {
+      let y = MARGIN_TOP;
+      y = drawHeader(docRef, d, y, logoImg);
+      y = drawMetaGrid(docRef, d, y);
+      casas.forEach((c, i) => { y = drawCasaBlock(docRef, c, y, i === 0); });
+      y = drawCondiciones(docRef, d, y);
+      y = drawFooter(docRef, d, y);
+      return y;
+    };
+    const drawPage2 = docRef => drawTurnkeyPage(docRef, logoWhite);
+
+    // Se mide el alto real de cada página ANTES de crear el documento final
+    // (ver buildPageHeight): jsPDF fija la posición de cada trazo con el alto
+    // de página vigente en el momento de dibujar, así que no se puede "recortar"
+    // la página después sin cortar el contenido de arriba por error.
+    const page1H = buildPageHeight(drawPage1);
+    const page2H = buildPageHeight(drawPage2);
+
+    const w = toPt(PAGE_W);
+    const doc = new jsPDF({ unit: "pt", format: [w, toPt(page1H)], orientation: orientFor(w, toPt(page1H)) });
+    registerFonts(doc);
+    drawPage1(doc);
+
+    doc.addPage([w, toPt(page2H)], orientFor(w, toPt(page2H)));
+    drawPage2(doc);
+
+    const cliente = (d["Cliente"] || "cliente").toString().trim().replace(/[^\w\-]+/g, "_");
+    const fecha = (d["Fecha"] || "").toString().trim().replace(/[^\w\-]+/g, "_");
+    doc.save(`Cotizacion_Neorigen_${cliente}_${fecha}.pdf`);
   } catch (err) {
     console.error(err);
     const showErr = mode === "upload" ? showErrorUpload : showErrorManual;
     showErr("Ocurrió un error generando el PDF: " + err.message);
   } finally {
-    pdfStage.innerHTML = "";
     btn.disabled = false;
     msg.hidden = true;
   }
