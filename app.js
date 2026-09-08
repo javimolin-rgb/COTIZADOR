@@ -4,6 +4,17 @@ const REQUIRED_DATOS = ["Cliente", "Fecha", "Vendedor", "Teléfono Vendedor", "P
 const REQUIRED_CASAS = ["Modelo", "Distribución", "Pisos", "M2 Útil", "M2 Terraza",
   "Valor UF m2 Útil", "Valor UF m2 Terraza"];
 
+// Distribución real de cada modelo (dormitorios/baños), verificada en vivo en neorigen.cl —
+// se usa para autocompletar el campo al elegir el modelo en el ingreso manual (queda editable).
+const DISTRIBUCION_POR_MODELO = {
+  "Lingue": "1D-1B",
+  "Huingán": "2D-2B",
+  "Maitén": "4D-4B",
+  "Peumo": "2D-2B",
+  "Roble": "3D-3B",
+  "Coihue": "3D-3B+ESC",
+};
+
 const state = { datos: null, casas: null };
 
 // ======================================================================
@@ -200,6 +211,12 @@ function addCasaCard() {
   modeloSelect.addEventListener("change", () => {
     modeloCustom.hidden = modeloSelect.value !== "__otro__";
     if (!modeloCustom.hidden) modeloCustom.focus();
+
+    // Autocompleta dormitorios/baños según el modelo elegido (queda editable igual).
+    const preset = DISTRIBUCION_POR_MODELO[modeloSelect.value];
+    if (preset) {
+      card.querySelector('[data-field="Distribución"]').value = preset;
+    }
   });
 
   card.querySelectorAll(".calc-input").forEach(inp =>
@@ -358,7 +375,6 @@ function buildSinglePage(d, casas) {
         <div class="title-block">
           <p class="kicker">Vive lo natural</p>
           <h1>Cotización</h1>
-          <p class="eyebrow">${d["Proyecto / Ubicación"]}</p>
         </div>
       </div>
 

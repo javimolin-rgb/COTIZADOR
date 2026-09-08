@@ -28,10 +28,10 @@ body{
   color:#fff;
   display:flex;
   align-items:center;
-  gap:20px;
-  padding:28px clamp(20px,5vw,64px);
+  gap:24px;
+  padding:24px clamp(20px,5vw,64px);
 }
-.topbar__logo{height:40px;width:auto;filter:brightness(0) invert(1);}
+.topbar__logo{height:64px;width:auto;filter:brightness(0) invert(1);}
 .topbar__text h1{
   font-family:var(--font-display);
   font-weight:600;
@@ -329,7 +329,7 @@ main{
   border-bottom:2px solid var(--navy);
   margin-bottom:18px;
 }
-.pdf-header img{height:42px;width:auto;}
+.pdf-header img{height:72px;width:auto;}
 .pdf-header .title-block{text-align:right;}
 .pdf-header .kicker{
   font-family:var(--font-mono);
