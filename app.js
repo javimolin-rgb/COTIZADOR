@@ -866,19 +866,19 @@ async function generatePdf(mode) {
       firstCasaOnPage = false;
     });
 
-    // Condiciones + pie siempre quedan juntos (nunca separados entre sí).
-    const condFooterH = measureBlockHeight((probe, startY) => {
-      return drawFooter(probe, d, drawCondiciones(probe, d, startY));
-    });
-    if (y + condFooterH > CONTENT_MAX_Y) {
+    // "Condiciones generales" es texto normal que sigue inmediatamente después
+    // de la última casa (nunca se pega al fondo ni se separa de las casas).
+    // Solo el pie de contacto (vendedor/teléfono/correo + disclaimer) se
+    // comporta como un pie de página real, pegado siempre al margen inferior.
+    // Igual se miden juntos para decidir si entran completos en la página
+    // actual (nunca se separan entre sí ni se cortan a la mitad).
+    const condH = measureBlockHeight((probe, startY) => drawCondiciones(probe, d, startY));
+    const footerH = measureBlockHeight((probe, startY) => drawFooter(probe, d, startY));
+    if (y + condH + footerH > CONTENT_MAX_Y) {
       y = startContentPage();
     }
-    // Condiciones + pie siempre quedan pegados al margen inferior de la página
-    // donde caigan, como un pie de página real — haya o no casas arriba en esa
-    // misma página, y sin importar cuánto espacio quede libre encima.
-    y = Math.max(y, CONTENT_MAX_Y - condFooterH);
-    y = drawCondiciones(doc, d, y);
-    y = drawFooter(doc, d, y);
+    drawCondiciones(doc, d, y);
+    drawFooter(doc, d, CONTENT_MAX_Y - footerH);
 
     // Página fija, siempre agregada al final: "Proyectos llave en mano".
     doc.addPage(pageFormat, "p");
