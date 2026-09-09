@@ -840,11 +840,9 @@ async function generatePdf(mode) {
     // "Cotización" + filete) para mantener el orden y la armonía visual sin
     // importar en cuántas páginas termine cayendo el contenido.
     let isFirstContentPage = true;
-    let currentPageHasCasas = false; // ¿la página actual ya tiene alguna casa dibujada?
     function startContentPage() {
       if (!isFirstContentPage) doc.addPage(pageFormat, "p");
       isFirstContentPage = false;
-      currentPageHasCasas = false;
       return drawHeader(doc, d, MARGIN_TOP, logoImg);
     }
 
@@ -866,7 +864,6 @@ async function generatePdf(mode) {
       }
       y = drawCasaBlock(doc, c, y, firstCasaOnPage);
       firstCasaOnPage = false;
-      currentPageHasCasas = true;
     });
 
     // Condiciones + pie siempre quedan juntos (nunca separados entre sí).
@@ -876,14 +873,10 @@ async function generatePdf(mode) {
     if (y + condFooterH > CONTENT_MAX_Y) {
       y = startContentPage();
     }
-    // Si condiciones + pie quedan solos en una página nueva (sin ninguna casa
-    // arriba, solo el encabezado), se alinean pegados al margen inferior —
-    // como un pie de página real — en vez de quedar arriba con un espacio en
-    // blanco enorme debajo. Cuando comparten página con alguna casa se dejan
-    // donde caigan naturalmente, justo después del último contenido.
-    if (!currentPageHasCasas) {
-      y = Math.max(y, CONTENT_MAX_Y - condFooterH);
-    }
+    // Condiciones + pie siempre quedan pegados al margen inferior de la página
+    // donde caigan, como un pie de página real — haya o no casas arriba en esa
+    // misma página, y sin importar cuánto espacio quede libre encima.
+    y = Math.max(y, CONTENT_MAX_Y - condFooterH);
     y = drawCondiciones(doc, d, y);
     y = drawFooter(doc, d, y);
 
