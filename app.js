@@ -29,6 +29,12 @@ const VENDEDORES = {
   "Macarena Diaz": { telefono: "+56 9 4235 5665", correo: "" },
 };
 
+// IVA vigente en Chile — se usa para desglosar Subtotal Neto + IVA = Valor Total,
+// tanto en la tabla de precios de cada casa como en el recuadro destacado del PDF
+// (pedido explícito del cliente tras revisar el "cotizador de ejemplo": faltaba
+// mostrar el IVA y el valor total, no solo el neto).
+const IVA_RATE = 0.19;
+
 const state = { datos: null, casas: null };
 
 // ======================================================================
@@ -84,11 +90,17 @@ function normalizeCasaRow(row) {
   const vt = toNumber(row["Valor UF m2 Terraza"]);
   const totalUtil = toNumber(row["Total UF Útil"]) || round1(m2u * vu);
   const totalTerraza = toNumber(row["Total UF Terraza"]) || round1(m2t * vt);
-  const totalNeto = toNumber(row["Valor UF Neto + IVA"]) || round1(totalUtil + totalTerraza);
+  // Subtotal neto (antes de IVA) + IVA (19%) = Valor Total — igual que en el
+  // "cotizador de ejemplo" del cliente (SUB-TOTAL NETO / IVA % / **TOTAL). Si la
+  // planilla trae un valor explícito en "Valor UF Neto + IVA", se respeta tal cual
+  // (override manual); si no, se calcula solo.
+  const subtotalNeto = round1(totalUtil + totalTerraza);
+  const iva = round1(subtotalNeto * IVA_RATE);
+  const totalNeto = toNumber(row["Valor UF Neto + IVA"]) || round1(subtotalNeto + iva);
   const promM2 = toNumber(row["Valor Prom UF/m2"]) || (m2tot ? round2(totalNeto / m2tot) : 0);
   return {
     modelo: row["Modelo"], distribucion: row["Distribución"], pisos: row["Pisos"],
-    m2u, m2t, m2tot, vu, vt, totalUtil, totalTerraza, totalNeto, promM2,
+    m2u, m2t, m2tot, vu, vt, totalUtil, totalTerraza, subtotalNeto, iva, totalNeto, promM2,
     notas: row["Notas"] || ""
   };
 }
@@ -238,6 +250,19 @@ vendedorSelect.addEventListener("change", () => {
   }
 });
 
+// Autocompleta "Fecha" con el día de hoy (dd-mm-aaaa) al abrir el ingreso manual —
+// sigue siendo un campo de texto normal, así que se puede editar igual que todos
+// los demás datos autocompletados (modelo, vendedor, etc.).
+(function initFechaDefault() {
+  const fechaInput = document.querySelector('#datos-form [data-field="Fecha"]');
+  if (fechaInput && !fechaInput.value) {
+    const hoy = new Date();
+    const dd = String(hoy.getDate()).padStart(2, "0");
+    const mm = String(hoy.getMonth() + 1).padStart(2, "0");
+    fechaInput.value = `${dd}-${mm}-${hoy.getFullYear()}`;
+  }
+})();
+
 function addCasaCard() {
   const node = casaTemplate.content.cloneNode(true);
   const card = node.querySelector(".casa-card");
@@ -297,7 +322,9 @@ function recalcCard(card) {
 
   const totalUtil = round1(m2u * vu);
   const totalTerraza = round1(m2t * vt);
-  const totalNeto = round1(totalUtil + totalTerraza);
+  const subtotalNeto = round1(totalUtil + totalTerraza);
+  const iva = round1(subtotalNeto * IVA_RATE);
+  const totalNeto = round1(subtotalNeto + iva);
   const promM2 = m2tot ? round2(totalNeto / m2tot) : 0;
 
   card.querySelector('[data-computed="Total UF Útil"]').value = "UF " + fmt(totalUtil);
@@ -568,9 +595,14 @@ function drawCasaBlock(doc, c, y, isFirst) {
   const colW = [240, Math.round((CONTENT_W - 240) / 3), Math.round((CONTENT_W - 240) / 3), 0];
   colW[3] = CONTENT_W - colW[0] - colW[1] - colW[2];
   const headerH = 23, rowH2 = 26;
+  // Las filas de subtotal e IVA no tienen valor UF/m2 ni superficie propias — solo
+  // se completa la columna "Total UF", igual que en el desglose del "cotizador de
+  // ejemplo" del cliente (SUB-TOTAL NETO / IVA % / **TOTAL).
   const rows = [
     ["M2 útil", fmt(c.vu, 2), fmt(c.m2u, 1), fmt(c.totalUtil)],
     ["M2 terraza", fmt(c.vt, 2), fmt(c.m2t, 1), fmt(c.totalTerraza)],
+    ["Subtotal neto", "", "", fmt(c.subtotalNeto)],
+    [`IVA (${fmt(IVA_RATE * 100, 0)}%)`, "", "", fmt(c.iva)],
   ];
   const headerLabels = ["Concepto", "Valor UF/m2", "Superficie m2", "Total UF"];
 
@@ -606,18 +638,21 @@ function drawCasaBlock(doc, c, y, isFirst) {
   y = ry + 12;
 
   // -- total destacado --
+  // A pedido del cliente: el valor más importante (Valor Total, neto + IVA) va a
+  // la mano derecha —donde termina la lectura— en tipografía grande; el valor
+  // promedio por m2 queda a la izquierda, como dato secundario.
   const boxH = 48, padXBox = 20;
   doc.setFillColor(...COLOR.navy);
   doc.roundedRect(toPt(MARGIN_X), toPt(y), toPt(CONTENT_W), toPt(boxH), toPt(6), toPt(6), "F");
   setF(doc, "PlexMono", 9.5, COLOR.whiteMuted);
-  doc.text("VALOR UF NETO + IVA", toPt(MARGIN_X + padXBox), toPt(y + 15), { baseline: "middle" });
-  setF(doc, "FrauncesSB", 23, COLOR.white);
-  doc.text(`UF ${fmt(c.totalNeto)}`, toPt(MARGIN_X + padXBox), toPt(y + 33), { baseline: "middle" });
+  doc.text("VALOR PROMEDIO", toPt(MARGIN_X + padXBox), toPt(y + 17), { baseline: "middle" });
+  setF(doc, "PlexMono", 10, COLOR.whiteMuted);
+  doc.text(`UF ${fmt(c.promM2, 2)} / m2`, toPt(MARGIN_X + padXBox), toPt(y + 32), { baseline: "middle" });
   const rightEdge = MARGIN_X + CONTENT_W - padXBox;
   setF(doc, "PlexMono", 9.5, COLOR.whiteMuted);
-  doc.text("VALOR PROMEDIO", toPt(rightEdge), toPt(y + 17), { baseline: "middle", align: "right" });
-  setF(doc, "PlexMono", 10, COLOR.whiteMuted);
-  doc.text(`UF ${fmt(c.promM2, 2)} / m2`, toPt(rightEdge), toPt(y + 32), { baseline: "middle", align: "right" });
+  doc.text("VALOR TOTAL", toPt(rightEdge), toPt(y + 15), { baseline: "middle", align: "right" });
+  setF(doc, "FrauncesSB", 23, COLOR.white);
+  doc.text(`UF ${fmt(c.totalNeto)}`, toPt(rightEdge), toPt(y + 33), { baseline: "middle", align: "right" });
   y += boxH + 12;
 
   // -- notas (opcional) --
@@ -641,23 +676,32 @@ function drawCasaBlock(doc, c, y, isFirst) {
   return y;
 }
 
-// ---- condiciones generales (lista en 2 columnas) ----
-function drawCondiciones(doc, d, y) {
+// Lo que este presupuesto NO incluye, según el "cotizador de ejemplo" que usa el
+// equipo comercial (hoja de cálculo armada a mano) — el cliente pidió que esta
+// lista de exclusiones también aparezca en el PDF que genera el cotizador.
+const EXCLUSIONES = [
+  "Pagos de gastos de agua y electricidad durante el período de construcción de la obra.",
+  "Pago de derechos municipales, aranceles por permiso de edificación, empalmes y afines.",
+  "Sistema de alarma.",
+  "Empalmes eléctricos, de agua y de gas (no se considera el valor del estanque de gas; solo acometidas hasta 10 mts).",
+  "Lámparas ni apliques — los provee el propietario; si llegan a la obra antes de que termine, la constructora los instala (solo se consideran focos embutidos).",
+  "Movimiento de tierra ni obras exteriores (calle de acceso, cierros, portón) — se cotizan como anexo al contrato y las paga directamente el propietario, sin utilidad para la constructora.",
+  "Sistema de calefacción central ni calderas (solo la estufa indicada en las especificaciones técnicas).",
+  "Cambios al diseño original: el cálculo específico para un nuevo diseño corre por cuenta del propietario.",
+  "Estudio topográfico ni estudio de suelo específico.",
+];
+
+// ---- un bloque de título + lista en 2 columnas (usado por "condiciones generales"
+// y por "esto no incluye", con el mismo lenguaje visual) ----
+function drawBulletSection(doc, y, title, items) {
   setF(doc, "PlexMono", 10.5, COLOR.madera);
-  doc.text("CONDICIONES GENERALES", toPt(MARGIN_X), toPt(y), { baseline: "top" });
+  doc.text(title, toPt(MARGIN_X), toPt(y), { baseline: "top" });
   const ruleY = y + 10.5 * 1.2 + 6;
   doc.setDrawColor(...COLOR.border);
   doc.setLineWidth(toPt(1));
   doc.line(toPt(MARGIN_X), toPt(ruleY), toPt(PAGE_W - MARGIN_X), toPt(ruleY));
   y = ruleY + 10;
 
-  const items = [
-    "Contrato a precio cerrado.",
-    "Forma de pago: cuotas contra estado de avance.",
-    "Proyectos diseñados para ocuparse inmediatamente, con todo el equipamiento esencial, salvo cama, refrigerador, lavadora y otros electrodomésticos personales.",
-    "El proyecto puede ajustarse a tus requerimientos personales o del terreno.",
-    `Esta cotización tiene una vigencia de ${d["Vigencia (días)"]} días desde la fecha de emisión.`,
-  ];
   const colGap = 24;
   const colW = (CONTENT_W - colGap) / 2;
   const col1Count = Math.ceil(items.length / 2);
@@ -680,6 +724,21 @@ function drawCondiciones(doc, d, y) {
     return cy;
   });
   return Math.max(...bottoms);
+}
+
+// ---- condiciones generales + "esto no incluye" (fluyen como texto normal,
+// nunca pegados al pie — ver drawFooter para el único bloque que sí lo hace) ----
+function drawCondiciones(doc, d, y) {
+  y = drawBulletSection(doc, y, "CONDICIONES GENERALES", [
+    "Contrato a precio cerrado.",
+    "Forma de pago: cuotas contra estado de avance.",
+    "Proyectos diseñados para ocuparse inmediatamente, con todo el equipamiento esencial, salvo cama, refrigerador, lavadora y otros electrodomésticos personales.",
+    "El proyecto puede ajustarse a tus requerimientos personales o del terreno.",
+    `Esta cotización tiene una vigencia de ${d["Vigencia (días)"]} días desde la fecha de emisión.`,
+  ]);
+  y += 18;
+  y = drawBulletSection(doc, y, "ESTE PRESUPUESTO NO INCLUYE", EXCLUSIONES);
+  return y;
 }
 
 // ---- pie de página ----
