@@ -1,18 +1,24 @@
 /* Cotizador Neorigen — todo corre en el navegador, no hay backend. */
 
-const REQUIRED_DATOS = ["Cliente", "Fecha", "Vendedor", "Teléfono Vendedor", "Proyecto / Ubicación", "Vigencia (días)"];
+const REQUIRED_DATOS = ["Cliente", "Teléfono Cliente", "Correo Cliente", "Fecha", "Vendedor",
+  "Teléfono Vendedor", "Proyecto / Ubicación", "Vigencia (días)"];
 const REQUIRED_CASAS = ["Modelo", "Distribución", "Pisos", "M2 Útil", "M2 Terraza",
   "Valor UF m2 Útil", "Valor UF m2 Terraza"];
 
-// Distribución real de cada modelo (dormitorios/baños), verificada en vivo en neorigen.cl —
-// se usa para autocompletar el campo al elegir el modelo en el ingreso manual (queda editable).
-const DISTRIBUCION_POR_MODELO = {
-  "Lingue": "1D-1B",
-  "Huingán": "2D-2B",
-  "Maitén": "4D-4B",
-  "Peumo": "2D-2B",
-  "Roble": "3D-3B",
-  "Coihue": "3D-3B+ESC",
+// Ficha técnica y precio base de cada modelo, según la "LISTA DE PRECIOS DEL 27 DE AGOSTO
+// DE 2026" (planilla oficial de precios de venta) — se usa para autocompletar distribución,
+// pisos, m2 y valores UF/m2 al elegir el modelo en el ingreso manual. Todos los campos quedan
+// editables igual después de autocompletarse (el vendedor puede ajustar valores por cliente/
+// terreno, tal como ya se hacía a mano).
+const PRECIOS_POR_MODELO = {
+  "Lingue":           { distribucion: "1D-1B",     pisos: "2 pisos", m2Util: 57.39,  m2Terraza: 29.07, valorUtil: 38,   valorTerraza: 6 },
+  "Huingán":          { distribucion: "2D-2B",     pisos: "1 piso",  m2Util: 73.76,  m2Terraza: 37.76, valorUtil: 36.5, valorTerraza: 6 },
+  "Peumo":            { distribucion: "2D-2B",     pisos: "2 pisos", m2Util: 87.3,   m2Terraza: 37.86, valorUtil: 36,   valorTerraza: 6 },
+  "Boldo":            { distribucion: "4D-2B",     pisos: "2 pisos", m2Util: 103.85, m2Terraza: 30,    valorUtil: 36,   valorTerraza: 6 },
+  "Huingán Familiar": { distribucion: "3D-2B",     pisos: "1 piso",  m2Util: 106.53, m2Terraza: 48.06, valorUtil: 34.5, valorTerraza: 6 },
+  "Roble":            { distribucion: "4D-3B",     pisos: "2 pisos", m2Util: 142.5,  m2Terraza: 34,    valorUtil: 33.5, valorTerraza: 6 },
+  "Maitén":           { distribucion: "4D-4B",     pisos: "2 pisos", m2Util: 145.79, m2Terraza: 85.4,  valorUtil: 34,   valorTerraza: 6 },
+  "Coihue":           { distribucion: "3D-3B+ESC", pisos: "1 piso",  m2Util: 167.38, m2Terraza: 60.52, valorUtil: 33,   valorTerraza: 6 },
 };
 
 // Datos de contacto por vendedor — se usan para autocompletar teléfono y correo
@@ -55,6 +61,12 @@ function round2(n) { return Math.round(n * 100) / 100; }
 // Chilean-style formatting: thousands with '.', decimals with ','
 function fmt(n, decimals = 0) {
   return Number(n || 0).toLocaleString("es-CL", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+// Igual que fmt(), pero sin ceros decimales de más (para escribir un valor "como lo
+// tipearía una persona" dentro de un input editable: 30 en vez de 30,00, 36,5 en vez de 36,50).
+function fmtEditable(n, maxDecimals = 2) {
+  return Number(n || 0).toLocaleString("es-CL", { minimumFractionDigits: 0, maximumFractionDigits: maxDecimals });
 }
 
 function missingFields(row, requiredCols) {
@@ -240,10 +252,18 @@ function addCasaCard() {
     modeloCustom.hidden = modeloSelect.value !== "__otro__";
     if (!modeloCustom.hidden) modeloCustom.focus();
 
-    // Autocompleta dormitorios/baños según el modelo elegido (queda editable igual).
-    const preset = DISTRIBUCION_POR_MODELO[modeloSelect.value];
+    // Autocompleta distribución, pisos, m2 y valores UF/m2 según el modelo elegido,
+    // tal como aparecen en la planilla oficial de precios (todos los campos quedan
+    // editables igual, por si hay que ajustar algo según el cliente o el terreno).
+    const preset = PRECIOS_POR_MODELO[modeloSelect.value];
     if (preset) {
-      card.querySelector('[data-field="Distribución"]').value = preset;
+      card.querySelector('[data-field="Distribución"]').value = preset.distribucion;
+      card.querySelector('[data-field="Pisos"]').value = preset.pisos;
+      card.querySelector('[data-field="M2 Útil"]').value = fmtEditable(preset.m2Util);
+      card.querySelector('[data-field="M2 Terraza"]').value = fmtEditable(preset.m2Terraza);
+      card.querySelector('[data-field="Valor UF m2 Útil"]').value = fmtEditable(preset.valorUtil);
+      card.querySelector('[data-field="Valor UF m2 Terraza"]').value = fmtEditable(preset.valorTerraza);
+      recalcCard(card);
     }
   });
 
@@ -439,21 +459,29 @@ function drawHeader(doc, d, y, logoImg) {
   return ruleY + 18;
 }
 
-// ---- datos generales: grilla de 3 columnas x 2 filas ----
+// ---- datos generales: grilla de 3 columnas x 3 filas ----
+// Fila 1: identidad y contacto del cliente. Fila 2: datos de la cotización.
+// Fila 3: contacto del vendedor (el correo del vendedor es opcional — si no se
+// cargó, esa celda simplemente se deja en blanco, sin romper la simetría de la grilla).
 function drawMetaGrid(doc, d, y) {
   const fields = [
     ["Cliente", d["Cliente"]],
+    ["Teléfono cliente", d["Teléfono Cliente"]],
+    ["Correo cliente", d["Correo Cliente"]],
     ["Fecha", d["Fecha"]],
     ["Vigencia", `${d["Vigencia (días)"]} días`],
     ["Proyecto / Ubicación", d["Proyecto / Ubicación"]],
     ["Vendedor", d["Vendedor"]],
     ["Teléfono vendedor", d["Teléfono Vendedor"]],
+    ["Correo vendedor", d["Correo Vendedor"]],
   ];
   const colGap = 20, rowGap = 12;
   const colW = (CONTENT_W - colGap * 2) / 3;
   const rowH = 28;
+  const nRows = 3;
 
   fields.forEach(([label, value], i) => {
+    if (!value) return; // celda opcional sin datos (p. ej. correo del vendedor): se deja en blanco
     const col = i % 3, row = Math.floor(i / 3);
     const x = MARGIN_X + col * (colW + colGap);
     const cellY = y + row * (rowH + rowGap);
@@ -463,7 +491,7 @@ function drawMetaGrid(doc, d, y) {
     doc.text(String(value), toPt(x), toPt(cellY + 13), { baseline: "top" });
   });
 
-  const contentBottom = y + rowH * 2 + rowGap;
+  const contentBottom = y + rowH * nRows + rowGap * (nRows - 1);
   const ruleY = contentBottom + 18;
   doc.setDrawColor(...COLOR.border);
   doc.setLineWidth(toPt(1));
