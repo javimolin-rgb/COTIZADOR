@@ -51,6 +51,21 @@ const FICHAS_POR_MODELO = {
   "Coihue": "assets/fichas/coihue.pdf",
 };
 
+// Foto render de cada modelo (mismos 8 modelos y mismas claves de arriba) — se
+// dibuja dentro del PDF, debajo del recuadro de precio de cada casa cotizada.
+// Un modelo "Otro" (texto libre, sin render oficial) simplemente no tiene
+// entrada acá y esa casa queda sin foto, sin romper nada.
+const RENDERS_POR_MODELO = {
+  "Lingue": "assets/renders/lingue.jpg",
+  "Huingán": "assets/renders/huingan.jpg",
+  "Peumo": "assets/renders/peumo.jpg",
+  "Boldo": "assets/renders/boldo.jpg",
+  "Huingán Familiar": "assets/renders/huingan-familiar.jpg",
+  "Roble": "assets/renders/roble.jpg",
+  "Maitén": "assets/renders/maiten.jpg",
+  "Coihue": "assets/renders/coihue.jpg",
+};
+
 // Documentos que se envían a todo cliente junto con la cotización (los mismos
 // que traía el correo original que dio origen a este cotizador) — se incluyen
 // siempre en el ZIP, sin importar qué modelos se cotizaron.
@@ -569,11 +584,15 @@ function drawMetaGrid(doc, d, y) {
 // para calcular si una casa cabe en el espacio que queda de la página actual.
 const DIVIDER_H = 36;
 
-// ---- una "casa" cotizada: título + chips + tabla de precios + total + notas ----
+// ---- una "casa" cotizada: título + chips + tabla de precios + total + foto + notas ----
 // `isFirst` = es la primera casa dibujada en la página ACTUAL (no necesariamente
 // la primera casa de toda la cotización) — así nunca queda un separador punteado
 // huérfano justo debajo del encabezado de una página nueva.
-function drawCasaBlock(doc, c, y, isFirst) {
+// `renderImg` = imagen ya cargada (o null si el modelo no tiene render) del
+// render de esta casa — se precarga antes de dibujar (ver buildQuotePdf) para
+// que tanto el dibujo real como la medición previa (measureBlockHeight) den
+// siempre el mismo alto.
+function drawCasaBlock(doc, c, y, isFirst, renderImg) {
   if (!isFirst) {
     y += 18;
     doc.setDrawColor(...COLOR.border);
@@ -694,6 +713,16 @@ function drawCasaBlock(doc, c, y, isFirst) {
   doc.text(`UF ${fmt(c.totalNeto)}`, toPt(rightEdge), toPt(y + 38), { baseline: "middle", align: "right" });
   y += boxH + 20;
 
+  // -- foto render de la casa (opcional) --
+  if (renderImg) {
+    const RENDER_MAX_W = 360, RENDER_MAX_H = 220;
+    let rw = RENDER_MAX_W, rh = rw * (renderImg.naturalHeight / renderImg.naturalWidth);
+    if (rh > RENDER_MAX_H) { rh = RENDER_MAX_H; rw = rh * (renderImg.naturalWidth / renderImg.naturalHeight); }
+    const rx = MARGIN_X + (CONTENT_W - rw) / 2;
+    doc.addImage(renderImg, "JPEG", toPt(rx), toPt(y), toPt(rw), toPt(rh), undefined, "MEDIUM");
+    y += rh + 20;
+  }
+
   // -- notas (opcional) --
   if (c.notas) {
     setF(doc, "WorkSans", 11);
@@ -812,26 +841,61 @@ function drawFooter(doc, d, y) {
 // con texto blanco, con todo lo que incluye cada proyecto Neorigen.
 // ======================================================================
 
-const TURNKEY_ITEMS = [
-  "Asesoría y acompañamiento en todo el proceso",
-  "Estructura completamente aislada (muros, techos y pisos)",
-  "Construcción sobre pilotes (eficiencia térmica y energética)",
-  "Mayor eficiencia con fachada ventilada (circulación de aire entre muros exteriores)",
-  "Muebles de cocina y closet en cada dormitorio (diseño flexible)",
-  "Artefactos de cocina (horno, encimera, extractor, cuba)",
-  "Cuarzo para cubiertas de cocina",
-  "Baños completamente equipados con shower, WC, vanitorio y kit de accesorios",
-  "Ventanas termopanel con perfil PVC (color a elección)",
-  "Piso y revestimiento de muro en madera (calidez y confort)",
-  "Muros pintados albayalde y piso vitrificado",
-  "Grifería y quincallería completa",
-  "Puertas de 2 mts de altura en toda la casa",
-  "Red eléctrica, sanitaria y de gas",
-  "Amplias terrazas aptas para zonas extremas",
-  "Estufa a combustión lenta incluida (Amesti o Bosca)",
-  "Diseños de planimetría flexibles y personalizados",
-  "Tramitación de permisos y recepción municipal",
-  "Fosa séptica, drenes y acometidas a servicios básicos",
+// Antes era una sola lista plana de 19 puntos muy distintos entre sí (proceso,
+// estructura, cocina, baños, instalaciones...), lo que hacía difícil de leer.
+// Se reagrupó por tema, con un subtítulo por grupo; cada columna de la página
+// reúne los grupos de temas afines (izquierda: gestión + estructura/sistemas de
+// la casa: derecha: terminaciones + equipamiento de cocina/baño), balanceadas
+// para ocupar un alto similar.
+const TURNKEY_COLUMNS = [
+  [
+    {
+      title: "Gestión y acompañamiento",
+      items: [
+        "Asesoría y acompañamiento en todo el proceso",
+        "Diseños de planimetría flexibles y personalizados",
+        "Tramitación de permisos y recepción municipal",
+      ],
+    },
+    {
+      title: "Estructura y eficiencia energética",
+      items: [
+        "Estructura completamente aislada (muros, techos y pisos)",
+        "Construcción sobre pilotes (eficiencia térmica y energética)",
+        "Mayor eficiencia con fachada ventilada (circulación de aire entre muros exteriores)",
+        "Amplias terrazas aptas para zonas extremas",
+      ],
+    },
+    {
+      title: "Instalaciones y climatización",
+      items: [
+        "Red eléctrica, sanitaria y de gas",
+        "Fosa séptica, drenes y acometidas a servicios básicos",
+        "Estufa a combustión lenta incluida (Amesti o Bosca)",
+      ],
+    },
+  ],
+  [
+    {
+      title: "Terminaciones interiores",
+      items: [
+        "Piso y revestimiento de muro en madera (calidez y confort)",
+        "Muros pintados albayalde y piso vitrificado",
+        "Puertas de 2 mts de altura en toda la casa",
+        "Ventanas termopanel con perfil PVC (color a elección)",
+      ],
+    },
+    {
+      title: "Cocina y baños equipados",
+      items: [
+        "Muebles de cocina y closet en cada dormitorio (diseño flexible)",
+        "Artefactos de cocina (horno, encimera, extractor, cuba)",
+        "Cuarzo para cubiertas de cocina",
+        "Baños completamente equipados con shower, WC, vanitorio y kit de accesorios",
+        "Grifería y quincallería completa",
+      ],
+    },
+  ],
 ];
 
 // Invierte a blanco el logo (que viene en trazo navy sobre fondo transparente)
@@ -880,36 +944,39 @@ function drawTurnkeyPage(doc, logoWhite) {
 
   // -- título central --
   setF(doc, "PlexMono", 10, COLOR.madera);
-  doc.text("INCLUIDO EN TODOS NUESTROS PROYECTOS", toPt(centerX), toPt(y), { baseline: "top", align: "center" });
+  doc.text("INCLUIDO EN TU PROYECTO LLAVE EN MANO", toPt(centerX), toPt(y), { baseline: "top", align: "center" });
   y += 10 * 1.3 + 8;
   setF(doc, "FrauncesSB", 27, COLOR.white);
-  doc.text("Proyectos llave en mano", toPt(centerX), toPt(y), { baseline: "top", align: "center" });
+  doc.text("Especificaciones y equipamiento", toPt(centerX), toPt(y), { baseline: "top", align: "center" });
   y += 27 * 1.25 + 28;
 
-  // -- lista en 2 columnas --
+  // -- lista en 2 columnas, agrupada por tema con un subtítulo por grupo --
   const colGap = 32;
   const colW = (CONTENT_W - colGap) / 2;
-  const col1Count = Math.ceil(TURNKEY_ITEMS.length / 2);
-  const columns = [TURNKEY_ITEMS.slice(0, col1Count), TURNKEY_ITEMS.slice(col1Count)];
-
-  setF(doc, "WorkSans", 11.5, COLOR.white);
   const lineH = 11.5 * 1.55;
+  const groupGap = 16;
   const listTop = y;
-  const bottoms = columns.map((list, colIdx) => {
+  const bottoms = TURNKEY_COLUMNS.map((groups, colIdx) => {
     const x = MARGIN_X + colIdx * (colW + colGap);
     let cy = listTop;
-    list.forEach(item => {
-      const lines = doc.splitTextToSize(item, toPt(colW - 16));
-      lines.forEach((line, i) => {
-        setF(doc, "WorkSans", 11.5, COLOR.white);
-        doc.text((i === 0 ? "•  " : "    ") + line, toPt(x), toPt(cy), { baseline: "top" });
-        cy += lineH;
+    groups.forEach(group => {
+      setF(doc, "PlexMonoSB", 9.5, COLOR.madera);
+      doc.text(group.title.toUpperCase(), toPt(x), toPt(cy), { baseline: "top" });
+      cy += 9.5 * 1.3 + 10;
+      group.items.forEach(item => {
+        const lines = doc.splitTextToSize(item, toPt(colW - 16));
+        lines.forEach((line, i) => {
+          setF(doc, "WorkSans", 11.5, COLOR.white);
+          doc.text((i === 0 ? "•  " : "    ") + line, toPt(x), toPt(cy), { baseline: "top" });
+          cy += lineH;
+        });
+        cy += 7;
       });
-      cy += 7;
+      cy += groupGap;
     });
     return cy;
   });
-  y = Math.max(...bottoms) + 30;
+  y = Math.max(...bottoms) + 14;
 
   // -- cierre --
   doc.setDrawColor(...COLOR.whiteMuted);
@@ -956,6 +1023,20 @@ async function buildQuotePdf() {
     const logoImg = await loadImage("assets/logo-neorigen.png");
     const logoWhite = invertLogoToWhite(logoImg);
 
+    // Precarga la foto render de cada modelo distinto cotizado (una sola vez aunque
+    // se repita el modelo). Si un modelo no tiene render (p. ej. "Otro" a mano) o la
+    // imagen no llega a cargar, queda simplemente en null y esa casa no muestra foto.
+    const renderImages = {};
+    for (const modelo of new Set(casas.map(c => c.modelo))) {
+      const renderPath = RENDERS_POR_MODELO[modelo];
+      if (!renderPath) continue;
+      try {
+        renderImages[modelo] = await loadImage(renderPath);
+      } catch (err) {
+        console.error("No se pudo cargar el render de", modelo, err);
+      }
+    }
+
     const pageFormat = [toPt(PAGE_W), toPt(PAGE_H)];
     const doc = new jsPDF({ unit: "pt", format: pageFormat, orientation: "p" });
     registerFonts(doc);
@@ -980,13 +1061,14 @@ async function buildQuotePdf() {
     // manteniendo siempre el mismo orden y el mismo lenguaje visual.
     let firstCasaOnPage = true;
     casas.forEach(c => {
-      const coreH = measureBlockHeight((probe, startY) => drawCasaBlock(probe, c, startY, true));
+      const renderImg = renderImages[c.modelo] || null;
+      const coreH = measureBlockHeight((probe, startY) => drawCasaBlock(probe, c, startY, true, renderImg));
       const blockH = coreH + (firstCasaOnPage ? 0 : DIVIDER_H);
       if (y + blockH > CONTENT_MAX_Y) {
         y = startContentPage();
         firstCasaOnPage = true;
       }
-      y = drawCasaBlock(doc, c, y, firstCasaOnPage);
+      y = drawCasaBlock(doc, c, y, firstCasaOnPage, renderImg);
       firstCasaOnPage = false;
     });
 
