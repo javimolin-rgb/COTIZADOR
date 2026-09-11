@@ -69,8 +69,12 @@
         </table>
       </div>
 
-      <button id="btn-generate-upload" class="btn-primary">Generar PDF</button>
+      <div class="btn-row">
+        <button id="btn-generate-upload" class="btn-primary">Generar PDF</button>
+        <button id="btn-zip-upload" class="btn-outline">⬇ Descargar carpeta ZIP (PDF + fichas + documentos)</button>
+      </div>
       <p class="generating-msg" data-for="upload" hidden>Generando PDF…</p>
+      <p class="generating-msg" data-for="upload-zip" hidden>Armando carpeta ZIP…</p>
     </section>
 
   </div>
@@ -131,8 +135,12 @@
     </section>
 
     <div id="error-box-manual" class="error-box" hidden></div>
-    <button id="btn-generate-manual" class="btn-primary">Generar PDF</button>
+    <div class="btn-row">
+      <button id="btn-generate-manual" class="btn-primary">Generar PDF</button>
+      <button id="btn-zip-manual" class="btn-outline">⬇ Descargar carpeta ZIP (PDF + fichas + documentos)</button>
+    </div>
     <p class="generating-msg" data-for="manual" hidden>Generando PDF…</p>
+    <p class="generating-msg" data-for="manual-zip" hidden>Armando carpeta ZIP…</p>
 
   </div>
 
@@ -207,6 +215,7 @@
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/fonts.js"></script>
+<script src="vendor/jszip.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -35,6 +35,31 @@ const VENDEDORES = {
 // mostrar el IVA y el valor total, no solo el neto).
 const IVA_RATE = 0.19;
 
+// Ficha técnica (PDF) de cada modelo — mismos 8 modelos y mismas claves que
+// PRECIOS_POR_MODELO, tal como están en la carpeta "FICHAS FINALES" del Drive
+// del cliente. Se usan en el botón "Descargar ZIP" para incluir automáticamente
+// la ficha del/los modelo(s) cotizados junto al PDF. Un modelo "Otro" (texto
+// libre, sin ficha oficial) simplemente no tiene entrada acá y se omite sin error.
+const FICHAS_POR_MODELO = {
+  "Lingue": "assets/fichas/lingue.pdf",
+  "Huingán": "assets/fichas/huingan.pdf",
+  "Peumo": "assets/fichas/peumo.pdf",
+  "Boldo": "assets/fichas/boldo.pdf",
+  "Huingán Familiar": "assets/fichas/huingan-familiar.pdf",
+  "Roble": "assets/fichas/roble.pdf",
+  "Maitén": "assets/fichas/maiten.pdf",
+  "Coihue": "assets/fichas/coihue.pdf",
+};
+
+// Documentos que se envían a todo cliente junto con la cotización (los mismos
+// que traía el correo original que dio origen a este cotizador) — se incluyen
+// siempre en el ZIP, sin importar qué modelos se cotizaron.
+const OTROS_DOCUMENTOS = [
+  { file: "assets/otros/brochure-terminaciones.pdf", name: "Brochure de terminaciones.pdf" },
+  { file: "assets/otros/book-neorigen.pdf", name: "Book Neorigen.pdf" },
+  { file: "assets/otros/llave-en-mano.jpg", name: "Proyectos llave en mano.jpg" },
+];
+
 const state = { datos: null, casas: null };
 
 // ======================================================================
@@ -117,6 +142,7 @@ const panelPreview = document.getElementById("panel-preview");
 const previewDatos = document.getElementById("preview-datos");
 const previewTable = document.getElementById("preview-table");
 const btnGenerateUpload = document.getElementById("btn-generate-upload");
+const btnZipUpload = document.getElementById("btn-zip-upload");
 
 dropzone.addEventListener("click", () => fileInput.click());
 dropzone.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") fileInput.click(); });
@@ -219,6 +245,7 @@ function renderPreview() {
 }
 
 btnGenerateUpload.addEventListener("click", () => generatePdf("upload"));
+btnZipUpload.addEventListener("click", () => downloadZip("upload"));
 
 // ======================================================================
 // MODO 2 — ingreso manual
@@ -228,6 +255,7 @@ const casasContainer = document.getElementById("casas-container");
 const casaTemplate = document.getElementById("casa-card-template");
 const btnAddCasa = document.getElementById("btn-add-casa");
 const btnGenerateManual = document.getElementById("btn-generate-manual");
+const btnZipManual = document.getElementById("btn-zip-manual");
 const errorBoxManual = document.getElementById("error-box-manual");
 
 // ---- selector de vendedor: autocompleta teléfono/correo (quedan editables) ----
@@ -367,19 +395,23 @@ function collectCasasFromForm() {
 function showErrorManual(msg) { errorBoxManual.hidden = false; errorBoxManual.textContent = msg; }
 function clearErrorManual() { errorBoxManual.hidden = true; errorBoxManual.textContent = ""; }
 
-btnGenerateManual.addEventListener("click", () => {
+// Valida y recolecta los datos del formulario manual hacia `state` — lo usan
+// tanto "Generar PDF" como "Descargar ZIP" (ambos necesitan exactamente la
+// misma validación antes de armar el PDF). Devuelve true si quedó todo listo
+// en `state.datos`/`state.casas`, o false si mostró un error y hay que abortar.
+function prepareManualState() {
   clearErrorManual();
   const datos = collectDatosFromForm();
   const missingDatos = missingFields(datos, REQUIRED_DATOS);
   if (missingDatos.length) {
     showErrorManual("Faltan estos datos generales:\n— " + missingDatos.join("\n— "));
-    return;
+    return false;
   }
 
   const casasRaw = collectCasasFromForm();
   if (casasRaw.length === 0) {
     showErrorManual("Agrega al menos una casa.");
-    return;
+    return false;
   }
   const casaProblems = [];
   casasRaw.forEach((row, i) => {
@@ -388,12 +420,19 @@ btnGenerateManual.addEventListener("click", () => {
   });
   if (casaProblems.length) {
     showErrorManual(casaProblems.join("\n"));
-    return;
+    return false;
   }
 
   state.datos = datos;
   state.casas = casasRaw.map(normalizeCasaRow);
-  generatePdf("manual");
+  return true;
+}
+
+btnGenerateManual.addEventListener("click", () => {
+  if (prepareManualState()) generatePdf("manual");
+});
+btnZipManual.addEventListener("click", () => {
+  if (prepareManualState()) downloadZip("manual");
 });
 
 // ======================================================================
@@ -904,18 +943,16 @@ function measureBlockHeight(drawFn) {
   return drawFn(probe, MARGIN_TOP) - MARGIN_TOP;
 }
 
-async function generatePdf(mode) {
-  const btn = mode === "upload" ? btnGenerateUpload : btnGenerateManual;
-  const msg = document.querySelector(`.generating-msg[data-for="${mode}"]`);
-  btn.disabled = true;
-  msg.hidden = false;
-  await new Promise(r => setTimeout(r, 30));
+// Arma el PDF de la cotización a partir de state.datos/state.casas y devuelve
+// el documento jsPDF ya completo (sin guardarlo/descargarlo) + el nombre base
+// para el archivo — así lo puede reutilizar tanto "Generar PDF" (descarga solo
+// el PDF) como "Descargar ZIP" (empaqueta este mismo PDF junto a fichas y
+// documentos adicionales).
+async function buildQuotePdf() {
+  const d = state.datos;
+  const casas = state.casas;
 
-  try {
-    const d = state.datos;
-    const casas = state.casas;
-
-    const { jsPDF } = window.jspdf;
+  const { jsPDF } = window.jspdf;
     const logoImg = await loadImage("assets/logo-neorigen.png");
     const logoWhite = invertLogoToWhite(logoImg);
 
@@ -973,11 +1010,84 @@ async function generatePdf(mode) {
 
     const cliente = (d["Cliente"] || "cliente").toString().trim().replace(/[^\w\-]+/g, "_");
     const fecha = (d["Fecha"] || "").toString().trim().replace(/[^\w\-]+/g, "_");
+    return { doc, cliente, fecha };
+}
+
+// ---- botón "Generar PDF": arma el PDF y lo descarga solo (comportamiento de siempre) ----
+async function generatePdf(mode) {
+  const btn = mode === "upload" ? btnGenerateUpload : btnGenerateManual;
+  const msg = document.querySelector(`.generating-msg[data-for="${mode}"]`);
+  btn.disabled = true;
+  msg.hidden = false;
+  await new Promise(r => setTimeout(r, 30));
+
+  try {
+    const { doc, cliente, fecha } = await buildQuotePdf();
     doc.save(`Cotizacion_Neorigen_${cliente}_${fecha}.pdf`);
   } catch (err) {
     console.error(err);
     const showErr = mode === "upload" ? showErrorUpload : showErrorManual;
     showErr("Ocurrió un error generando el PDF: " + err.message);
+  } finally {
+    btn.disabled = false;
+    msg.hidden = true;
+  }
+}
+
+// ---- botón "Descargar ZIP": arma el mismo PDF y lo empaqueta junto a la(s)
+// ficha(s) técnica(s) de los modelos cotizados + brochure + book + lámina
+// "llave en mano" — pedido del cliente para no tener que enviar cada archivo
+// por separado a los clientes. Los archivos base viven en assets/fichas/ y
+// assets/otros/, se traen con fetch() (mismo origen, sin depender de Drive) y
+// se arman en un .zip 100% en el navegador con JSZip (vendorizado, sin CDN).
+async function downloadZip(mode) {
+  const btn = mode === "upload" ? btnZipUpload : btnZipManual;
+  const msg = document.querySelector(`.generating-msg[data-for="${mode}-zip"]`);
+  btn.disabled = true;
+  msg.hidden = false;
+  await new Promise(r => setTimeout(r, 30));
+
+  try {
+    const { doc, cliente, fecha } = await buildQuotePdf();
+    const pdfBlob = doc.output("blob");
+
+    const zip = new JSZip();
+    zip.file(`Cotizacion_Neorigen_${cliente}_${fecha}.pdf`, pdfBlob);
+
+    // Una ficha por modelo distinto cotizado (sin repetir si se cotiza el
+    // mismo modelo más de una vez) — los modelos "Otro" (texto libre, sin
+    // ficha oficial) simplemente no tienen archivo y se omiten sin error.
+    const modelosUnicos = [...new Set(state.casas.map(c => c.modelo))];
+    for (const modelo of modelosUnicos) {
+      const fichaPath = FICHAS_POR_MODELO[modelo];
+      if (!fichaPath) continue;
+      const resp = await fetch(fichaPath);
+      if (resp.ok) {
+        zip.file(`Ficha técnica - ${modelo}.pdf`, await resp.blob());
+      }
+    }
+
+    // Documentos que siempre se incluyen, sin importar los modelos cotizados.
+    for (const item of OTROS_DOCUMENTOS) {
+      const resp = await fetch(item.file);
+      if (resp.ok) {
+        zip.file(item.name, await resp.blob());
+      }
+    }
+
+    const zipBlob = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Cotizacion_Neorigen_${cliente}_${fecha}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (err) {
+    console.error(err);
+    const showErr = mode === "upload" ? showErrorUpload : showErrorManual;
+    showErr("Ocurrió un error generando el ZIP: " + err.message);
   } finally {
     btn.disabled = false;
     msg.hidden = true;

@@ -186,6 +186,28 @@ main{
   color:var(--verde-pino);
 }
 
+.btn-row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px;
+  align-items:stretch;
+}
+.btn-row .btn-primary,.btn-row .btn-outline{width:auto;flex:1 1 220px;}
+.btn-outline{
+  background:#fff;
+  border:1.5px solid var(--navy);
+  color:var(--navy);
+  border-radius:8px;
+  padding:13px 20px;
+  font-family:var(--font-body);
+  font-weight:600;
+  font-size:.9rem;
+  cursor:pointer;
+  transition:background .15s;
+}
+.btn-outline:hover{background:var(--niebla);}
+.btn-outline:disabled{opacity:.5;cursor:not-allowed;}
+
 
 /* ---------- tabs ---------- */
 .tabs{
