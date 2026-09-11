@@ -594,7 +594,7 @@ function drawCasaBlock(doc, c, y, isFirst) {
   // -- tabla de precios --
   const colW = [240, Math.round((CONTENT_W - 240) / 3), Math.round((CONTENT_W - 240) / 3), 0];
   colW[3] = CONTENT_W - colW[0] - colW[1] - colW[2];
-  const headerH = 23, rowH2 = 26;
+  const headerH = 25, rowH2 = 30;
   // Las filas de subtotal e IVA no tienen valor UF/m2 ni superficie propias — solo
   // se completa la columna "Total UF", igual que en el desglose del "cotizador de
   // ejemplo" del cliente (SUB-TOTAL NETO / IVA % / **TOTAL).
@@ -635,25 +635,25 @@ function drawCasaBlock(doc, c, y, isFirst) {
     });
     ry += rowH2;
   });
-  y = ry + 12;
+  y = ry + 18;
 
   // -- total destacado --
   // A pedido del cliente: el valor más importante (Valor Total, neto + IVA) va a
   // la mano derecha —donde termina la lectura— en tipografía grande; el valor
   // promedio por m2 queda a la izquierda, como dato secundario.
-  const boxH = 48, padXBox = 20;
+  const boxH = 56, padXBox = 20;
   doc.setFillColor(...COLOR.navy);
   doc.roundedRect(toPt(MARGIN_X), toPt(y), toPt(CONTENT_W), toPt(boxH), toPt(6), toPt(6), "F");
   setF(doc, "PlexMono", 9.5, COLOR.whiteMuted);
-  doc.text("VALOR PROMEDIO", toPt(MARGIN_X + padXBox), toPt(y + 17), { baseline: "middle" });
+  doc.text("VALOR PROMEDIO", toPt(MARGIN_X + padXBox), toPt(y + 20), { baseline: "middle" });
   setF(doc, "PlexMono", 10, COLOR.whiteMuted);
-  doc.text(`UF ${fmt(c.promM2, 2)} / m2`, toPt(MARGIN_X + padXBox), toPt(y + 32), { baseline: "middle" });
+  doc.text(`UF ${fmt(c.promM2, 2)} / m2`, toPt(MARGIN_X + padXBox), toPt(y + 37), { baseline: "middle" });
   const rightEdge = MARGIN_X + CONTENT_W - padXBox;
   setF(doc, "PlexMono", 9.5, COLOR.whiteMuted);
-  doc.text("VALOR TOTAL", toPt(rightEdge), toPt(y + 15), { baseline: "middle", align: "right" });
+  doc.text("VALOR TOTAL", toPt(rightEdge), toPt(y + 18), { baseline: "middle", align: "right" });
   setF(doc, "FrauncesSB", 23, COLOR.white);
-  doc.text(`UF ${fmt(c.totalNeto)}`, toPt(rightEdge), toPt(y + 33), { baseline: "middle", align: "right" });
-  y += boxH + 12;
+  doc.text(`UF ${fmt(c.totalNeto)}`, toPt(rightEdge), toPt(y + 38), { baseline: "middle", align: "right" });
+  y += boxH + 20;
 
   // -- notas (opcional) --
   if (c.notas) {
@@ -700,7 +700,7 @@ function drawBulletSection(doc, y, title, items) {
   doc.setDrawColor(...COLOR.border);
   doc.setLineWidth(toPt(1));
   doc.line(toPt(MARGIN_X), toPt(ruleY), toPt(PAGE_W - MARGIN_X), toPt(ruleY));
-  y = ruleY + 10;
+  y = ruleY + 16;
 
   const colGap = 24;
   const colW = (CONTENT_W - colGap) / 2;
@@ -708,7 +708,7 @@ function drawBulletSection(doc, y, title, items) {
   const columns = [items.slice(0, col1Count), items.slice(col1Count)];
 
   setF(doc, "WorkSans", 9.8, COLOR.ink);
-  const bulletLineH = 9.8 * 1.35;
+  const bulletLineH = 9.8 * 1.5;
 
   const bottoms = columns.map((list, colIdx) => {
     const x = MARGIN_X + colIdx * (colW + colGap);
@@ -719,7 +719,7 @@ function drawBulletSection(doc, y, title, items) {
         doc.text(line, toPt(x), toPt(cy), { baseline: "top" });
         cy += bulletLineH;
       });
-      cy += 6;
+      cy += 10;
     });
     return cy;
   });
@@ -736,7 +736,7 @@ function drawCondiciones(doc, d, y) {
     "El proyecto puede ajustarse a tus requerimientos personales o del terreno.",
     `Esta cotización tiene una vigencia de ${d["Vigencia (días)"]} días desde la fecha de emisión.`,
   ]);
-  y += 18;
+  y += 28;
   y = drawBulletSection(doc, y, "ESTE PRESUPUESTO NO INCLUYE", EXCLUSIONES);
   return y;
 }
