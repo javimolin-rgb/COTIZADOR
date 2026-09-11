@@ -470,6 +470,7 @@ const MARGIN_TOP = 40;
 const MARGIN_BOTTOM = 28;
 const CONTENT_W = PAGE_W - MARGIN_X * 2;
 const CONTENT_MAX_Y = PAGE_H - MARGIN_BOTTOM; // límite inferior útil de cada página
+const RENDER_H = 300; // alto fijo de la foto render de cada casa (el ancho es siempre CONTENT_W)
 
 const COLOR = {
   navy: [1, 30, 47],
@@ -508,6 +509,26 @@ function loadImage(src) {
     img.onerror = reject;
     img.src = src;
   });
+}
+
+// Recorta `img` al encuadre exacto de targetW×targetH (mismo criterio que
+// `background-size: cover` en CSS): la imagen se escala para cubrir todo el
+// recuadro sin deformarse y el sobrante se recorta centrado (arriba/abajo o a
+// los lados, según cuál sobre). Se renderiza a 2x para que se vea nítida en el
+// PDF (impresión o zoom), no solo a la resolución "de pantalla" del recuadro.
+function cropToCover(img, targetW, targetH) {
+  const SCALE = 2;
+  const cw = targetW * SCALE, ch = targetH * SCALE;
+  const scale = Math.max(cw / img.naturalWidth, ch / img.naturalHeight);
+  const srcW = cw / scale, srcH = ch / scale;
+  const srcX = (img.naturalWidth - srcW) / 2, srcY = (img.naturalHeight - srcH) / 2;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = cw;
+  canvas.height = ch;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, cw, ch);
+  return canvas;
 }
 
 function setF(doc, family, sizePx, colorRgb) {
@@ -714,12 +735,15 @@ function drawCasaBlock(doc, c, y, isFirst, renderImg) {
   y += boxH + 20;
 
   // -- foto render de la casa (opcional) --
+  // A pedido del cliente: la foto ocupa todo el ancho del texto (mismo ancho que
+  // la tabla/recuadro de arriba), recortando la imagen si hace falta en vez de
+  // encogerla — mismo tratamiento "cover" que un fondo de CSS. `cropToCover()`
+  // arma un canvas ya recortado al encuadre exacto que se necesita, así jsPDF
+  // solo tiene que ubicarlo, no encogerlo dentro de una caja más chica.
   if (renderImg) {
-    const RENDER_MAX_W = 360, RENDER_MAX_H = 220;
-    let rw = RENDER_MAX_W, rh = rw * (renderImg.naturalHeight / renderImg.naturalWidth);
-    if (rh > RENDER_MAX_H) { rh = RENDER_MAX_H; rw = rh * (renderImg.naturalWidth / renderImg.naturalHeight); }
-    const rx = MARGIN_X + (CONTENT_W - rw) / 2;
-    doc.addImage(renderImg, "JPEG", toPt(rx), toPt(y), toPt(rw), toPt(rh), undefined, "MEDIUM");
+    const rw = CONTENT_W, rh = RENDER_H;
+    const cropped = cropToCover(renderImg, rw, rh);
+    doc.addImage(cropped, "JPEG", toPt(MARGIN_X), toPt(y), toPt(rw), toPt(rh), undefined, "MEDIUM");
     y += rh + 20;
   }
 
