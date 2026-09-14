@@ -470,7 +470,15 @@ const MARGIN_TOP = 40;
 const MARGIN_BOTTOM = 28;
 const CONTENT_W = PAGE_W - MARGIN_X * 2;
 const CONTENT_MAX_Y = PAGE_H - MARGIN_BOTTOM; // límite inferior útil de cada página
-const RENDER_H = 300; // alto fijo de la foto render de cada casa (el ancho es siempre CONTENT_W)
+
+// La foto render de cada casa (ancho siempre CONTENT_W) tiene un alto DINÁMICO:
+// se calcula en buildQuotePdf() para que la foto llene el espacio en blanco que
+// sobra en la página después de todo lo demás (a pedido del cliente), en vez de
+// usar siempre el mismo alto fijo. Estas constantes son solo el piso y el techo
+// de ese cálculo — nunca el valor real que termina usando cada casa.
+const RENDER_MIN_H = 220; // alto mínimo (para que nunca quede una foto demasiado chica)
+const RENDER_MAX_H = 640; // tope de alto (para que no quede una foto absurdamente alta)
+const RENDER_MARGIN_BOTTOM = 20; // separación fija después de la foto, siempre la misma
 
 const COLOR = {
   navy: [1, 30, 47],
@@ -605,15 +613,14 @@ function drawMetaGrid(doc, d, y) {
 // para calcular si una casa cabe en el espacio que queda de la página actual.
 const DIVIDER_H = 36;
 
-// ---- una "casa" cotizada: título + chips + tabla de precios + total + foto + notas ----
+// ---- núcleo de una "casa" cotizada: título + chips + tabla de precios + total
+// destacado — todo lo que NO depende del alto de la foto render, separado en su
+// propia función para poder medirlo aparte (ver buildQuotePdf) y así calcular
+// cuánto espacio le queda disponible a la foto en cada página. ----
 // `isFirst` = es la primera casa dibujada en la página ACTUAL (no necesariamente
 // la primera casa de toda la cotización) — así nunca queda un separador punteado
 // huérfano justo debajo del encabezado de una página nueva.
-// `renderImg` = imagen ya cargada (o null si el modelo no tiene render) del
-// render de esta casa — se precarga antes de dibujar (ver buildQuotePdf) para
-// que tanto el dibujo real como la medición previa (measureBlockHeight) den
-// siempre el mismo alto.
-function drawCasaBlock(doc, c, y, isFirst, renderImg) {
+function drawCasaCore(doc, c, y, isFirst) {
   if (!isFirst) {
     y += 18;
     doc.setDrawColor(...COLOR.border);
@@ -734,20 +741,12 @@ function drawCasaBlock(doc, c, y, isFirst, renderImg) {
   doc.text(`UF ${fmt(c.totalNeto)}`, toPt(rightEdge), toPt(y + 38), { baseline: "middle", align: "right" });
   y += boxH + 20;
 
-  // -- foto render de la casa (opcional) --
-  // A pedido del cliente: la foto ocupa todo el ancho del texto (mismo ancho que
-  // la tabla/recuadro de arriba), recortando la imagen si hace falta en vez de
-  // encogerla — mismo tratamiento "cover" que un fondo de CSS. `cropToCover()`
-  // arma un canvas ya recortado al encuadre exacto que se necesita, así jsPDF
-  // solo tiene que ubicarlo, no encogerlo dentro de una caja más chica.
-  if (renderImg) {
-    const rw = CONTENT_W, rh = RENDER_H;
-    const cropped = cropToCover(renderImg, rw, rh);
-    doc.addImage(cropped, "JPEG", toPt(MARGIN_X), toPt(y), toPt(rw), toPt(rh), undefined, "MEDIUM");
-    y += rh + 20;
-  }
+  return y;
+}
 
-  // -- notas (opcional) --
+// ---- notas (opcional) de una casa — separadas del resto para poder medir su
+// alto de forma independiente (ver drawCasaCore más arriba y buildQuotePdf). ----
+function drawCasaNotesBlock(doc, c, y) {
   if (c.notas) {
     setF(doc, "WorkSans", 11);
     const notesW = CONTENT_W - 14 * 2;
@@ -764,6 +763,34 @@ function drawCasaBlock(doc, c, y, isFirst, renderImg) {
     });
     y += notesBoxH;
   }
+  return y;
+}
+
+// ---- una casa completa: núcleo (drawCasaCore) + foto render + notas ----
+// `renderImg` = imagen ya cargada (o null si el modelo no tiene render) del
+// render de esta casa — se precarga antes de dibujar (ver buildQuotePdf).
+// `renderH` = alto en px que debe ocupar la foto en ESTA página en particular:
+// se calcula en buildQuotePdf ANTES de llamar a esta función, para que la foto
+// llene el espacio en blanco que sobra en la página (a pedido del cliente) en
+// vez de usar siempre el mismo alto fijo — así el mismo modelo puede terminar
+// con una foto de distinto alto en cotizaciones distintas, según cuánto espacio
+// quede libre cada vez. Ignorado si `renderImg` es null.
+function drawCasaBlock(doc, c, y, isFirst, renderImg, renderH) {
+  y = drawCasaCore(doc, c, y, isFirst);
+
+  // A pedido del cliente: la foto ocupa todo el ancho del texto (mismo ancho que
+  // la tabla/recuadro de arriba), recortando la imagen si hace falta en vez de
+  // encogerla — mismo tratamiento "cover" que un fondo de CSS. `cropToCover()`
+  // arma un canvas ya recortado al encuadre exacto que se necesita, así jsPDF
+  // solo tiene que ubicarlo, no encogerlo dentro de una caja más chica.
+  if (renderImg) {
+    const rw = CONTENT_W, rh = renderH;
+    const cropped = cropToCover(renderImg, rw, rh);
+    doc.addImage(cropped, "JPEG", toPt(MARGIN_X), toPt(y), toPt(rw), toPt(rh), undefined, "MEDIUM");
+    y += rh + RENDER_MARGIN_BOTTOM;
+  }
+
+  y = drawCasaNotesBlock(doc, c, y);
 
   return y;
 }
@@ -1083,16 +1110,54 @@ async function buildQuotePdf() {
     // un bloque de casa a la mitad) — así, con más de 1-2 casas cotizadas,
     // la cotización simplemente continúa en la(s) página(s) que hagan falta,
     // manteniendo siempre el mismo orden y el mismo lenguaje visual.
-    let firstCasaOnPage = true;
-    casas.forEach(c => {
+    // El alto de "todo lo que no es la foto" (núcleo + notas) de cada casa no
+    // cambia según la página en la que caiga, así que se mide una sola vez acá
+    // y se reutiliza tanto para decidir la paginación como para calcular cuánto
+    // espacio le queda a la foto — en vez de volver a medir cada casa dos veces.
+    const casaMeasurements = casas.map(c => {
       const renderImg = renderImages[c.modelo] || null;
-      const coreH = measureBlockHeight((probe, startY) => drawCasaBlock(probe, c, startY, true, renderImg));
-      const blockH = coreH + (firstCasaOnPage ? 0 : DIVIDER_H);
-      if (y + blockH > CONTENT_MAX_Y) {
+      const coreH = measureBlockHeight((probe, startY) => drawCasaCore(probe, c, startY, true));
+      const notesH = measureBlockHeight((probe, startY) => drawCasaNotesBlock(probe, c, startY));
+      return { c, renderImg, coreH, notesH };
+    });
+
+    let firstCasaOnPage = true;
+    casaMeasurements.forEach((m, i) => {
+      const { c, renderImg, coreH, notesH } = m;
+      const minImgH = renderImg ? RENDER_MIN_H + RENDER_MARGIN_BOTTOM : 0;
+      const minBlockH = coreH + minImgH + notesH + (firstCasaOnPage ? 0 : DIVIDER_H);
+
+      if (y + minBlockH > CONTENT_MAX_Y) {
         y = startContentPage();
         firstCasaOnPage = true;
       }
-      y = drawCasaBlock(doc, c, y, firstCasaOnPage, renderImg);
+
+      const yAfterCore = y + (firstCasaOnPage ? 0 : DIVIDER_H) + coreH;
+
+      // Para saber si esta foto puede estirarse a ocupar todo el blanco que
+      // sobra en la página, hay que saber si es la ÚLTIMA casa de la página:
+      // si viene otra casa después, hay que dejarle su espacio (foto al alto
+      // mínimo) en vez de quedarse con todo el blanco disponible.
+      let isLastOnPage = true;
+      if (i + 1 < casaMeasurements.length) {
+        const next = casaMeasurements[i + 1];
+        const nextMinImgH = next.renderImg ? RENDER_MIN_H + RENDER_MARGIN_BOTTOM : 0;
+        const yIfThisUsesMin = yAfterCore + minImgH + notesH;
+        const nextMinBlockH = next.coreH + nextMinImgH + next.notesH + DIVIDER_H;
+        isLastOnPage = yIfThisUsesMin + nextMinBlockH > CONTENT_MAX_Y;
+      }
+
+      let renderH = null;
+      if (renderImg) {
+        if (isLastOnPage) {
+          const available = CONTENT_MAX_Y - yAfterCore - notesH - RENDER_MARGIN_BOTTOM;
+          renderH = Math.max(RENDER_MIN_H, Math.min(RENDER_MAX_H, available));
+        } else {
+          renderH = RENDER_MIN_H;
+        }
+      }
+
+      y = drawCasaBlock(doc, c, y, firstCasaOnPage, renderImg, renderH);
       firstCasaOnPage = false;
     });
 
