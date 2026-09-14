@@ -132,11 +132,11 @@ function normalizeCasaRow(row) {
   const totalTerraza = toNumber(row["Total UF Terraza"]) || round1(m2t * vt);
   // Subtotal neto (antes de IVA) + IVA (19%) = Valor Total — igual que en el
   // "cotizador de ejemplo" del cliente (SUB-TOTAL NETO / IVA % / **TOTAL). Si la
-  // planilla trae un valor explícito en "Valor UF Neto + IVA", se respeta tal cual
+  // planilla trae un valor explícito en "Total UF Neto + IVA", se respeta tal cual
   // (override manual); si no, se calcula solo.
   const subtotalNeto = round1(totalUtil + totalTerraza);
   const iva = round1(subtotalNeto * IVA_RATE);
-  const totalNeto = toNumber(row["Valor UF Neto + IVA"]) || round1(subtotalNeto + iva);
+  const totalNeto = toNumber(row["Total UF Neto + IVA"]) || round1(subtotalNeto + iva);
   const promM2 = toNumber(row["Valor Prom UF/m2"]) || (m2tot ? round2(totalNeto / m2tot) : 0);
   return {
     modelo: row["Modelo"], distribucion: row["Distribución"], pisos: row["Pisos"],
@@ -244,7 +244,7 @@ function renderPreview() {
   `).join("");
 
   const cols = ["Modelo", "Distribución", "Pisos", "M2 Útil", "M2 Terraza", "M2 Totales",
-    "Total UF Útil", "Total UF Terraza", "Valor UF Neto + IVA", "Valor Prom UF/m2"];
+    "Total UF Útil", "Total UF Terraza", "Total UF Neto + IVA", "Valor Prom UF/m2"];
   previewTable.querySelector("thead").innerHTML = "<tr>" + cols.map(c => `<th>${c}</th>`).join("") + "</tr>";
   previewTable.querySelector("tbody").innerHTML = state.casas.map(c => `
     <tr>
@@ -372,7 +372,7 @@ function recalcCard(card) {
 
   card.querySelector('[data-computed="Total UF Útil"]').value = "UF " + fmt(totalUtil);
   card.querySelector('[data-computed="Total UF Terraza"]').value = "UF " + fmt(totalTerraza);
-  card.querySelector('[data-computed="Valor UF Neto + IVA"]').value = "UF " + fmt(totalNeto);
+  card.querySelector('[data-computed="Total UF Neto + IVA"]').value = "UF " + fmt(totalNeto);
   card.querySelector('[data-computed="Valor Prom UF/m2"]').value = "UF " + fmt(promM2, 2);
 }
 
