@@ -24,9 +24,10 @@ const PRECIOS_POR_MODELO = {
 // Datos de contacto por vendedor — se usan para autocompletar teléfono y correo
 // al elegir el vendedor en el ingreso manual (los campos quedan editables igual).
 const VENDEDORES = {
-  "Alejandro Vásquez": { telefono: "+56 9 4223 4330", correo: "" },
-  "Flavio Simonetti": { telefono: "+56 9 4235 5665", correo: "" },
-  "Macarena Diaz": { telefono: "+56 9 4235 5665", correo: "" },
+  "Alejandro Vásquez": { telefono: "+56 9 4223 4330", correo: "avasquez@neorigen.cl" },
+  "Flavio Simonetti": { telefono: "+56 9 4235 5665", correo: "fsimonetti@neorigen.cl" },
+  "Macarena Diaz": { telefono: "+56 9 4235 5665", correo: "mdiaz@neorigen.cl" },
+  "Macarena Miquel": { telefono: "+56 9 9435 1060", correo: "mmiquel@neorigen.cl" },
 };
 
 // IVA vigente en Chile — se usa para desglosar Subtotal Neto + IVA = Valor Total,
@@ -372,6 +373,7 @@ function recalcCard(card) {
 
   card.querySelector('[data-computed="Total UF Útil"]').value = "UF " + fmt(totalUtil);
   card.querySelector('[data-computed="Total UF Terraza"]').value = "UF " + fmt(totalTerraza);
+  card.querySelector('[data-computed="Subtotal Neto"]').value = "UF " + fmt(subtotalNeto);
   card.querySelector('[data-computed="Total UF Neto + IVA"]').value = "UF " + fmt(totalNeto);
   card.querySelector('[data-computed="Valor Prom UF/m2"]').value = "UF " + fmt(promM2, 2);
 }
