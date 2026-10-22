@@ -76,6 +76,15 @@ const OTROS_DOCUMENTOS = [
   { file: "assets/otros/llave-en-mano.jpg", name: "Proyectos llave en mano.jpg" },
 ];
 
+// Versión de los archivos que viven en assets/ (renders, fichas, brochures).
+// Se agrega como ?v= al final de cada URL: si se reemplaza un archivo sin
+// cambiarle el nombre, el navegador ve una URL distinta y descarga el nuevo en
+// vez de seguir usando el viejo que tenía cacheado. Subir este número cada vez
+// que se reemplace un archivo dentro de assets/.
+const ASSETS_VERSION = 2;
+
+const urlAsset = (path) => `${path}?v=${ASSETS_VERSION}`;
+
 const state = { datos: null, casas: null };
 
 // ======================================================================
@@ -1073,7 +1082,7 @@ async function buildQuotePdf() {
   const casas = state.casas;
 
   const { jsPDF } = window.jspdf;
-    const logoImg = await loadImage("assets/logo-neorigen.png");
+    const logoImg = await loadImage(urlAsset("assets/logo-neorigen.png"));
     const logoWhite = invertLogoToWhite(logoImg);
 
     // Precarga la foto render de cada modelo distinto cotizado (una sola vez aunque
@@ -1084,7 +1093,7 @@ async function buildQuotePdf() {
       const renderPath = RENDERS_POR_MODELO[modelo];
       if (!renderPath) continue;
       try {
-        renderImages[modelo] = await loadImage(renderPath);
+        renderImages[modelo] = await loadImage(urlAsset(renderPath));
       } catch (err) {
         console.error("No se pudo cargar el render de", modelo, err);
       }
@@ -1234,7 +1243,7 @@ async function downloadZip(mode) {
     for (const modelo of modelosUnicos) {
       const fichaPath = FICHAS_POR_MODELO[modelo];
       if (!fichaPath) continue;
-      const resp = await fetch(fichaPath);
+      const resp = await fetch(urlAsset(fichaPath));
       if (resp.ok) {
         zip.file(`Ficha técnica - ${modelo}.pdf`, await resp.blob());
       }
@@ -1242,7 +1251,7 @@ async function downloadZip(mode) {
 
     // Documentos que siempre se incluyen, sin importar los modelos cotizados.
     for (const item of OTROS_DOCUMENTOS) {
-      const resp = await fetch(item.file);
+      const resp = await fetch(urlAsset(item.file));
       if (resp.ok) {
         zip.file(item.name, await resp.blob());
       }
